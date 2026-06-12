@@ -1,0 +1,1 @@
+{"name":"pm-agents","version":"0.1.0","private":true,"scripts":{"demo":"node strategy/cli.js demo && node strategy/cli.js render"},"dependencies":{"docx":"^9.0.0"}}
