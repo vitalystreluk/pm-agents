@@ -204,6 +204,8 @@ The calibration step is the most important structural safeguard.
 
 **Hard rule:** `calibrationPassed: true` must exist in `calibration.json` before e3-run executes. The CLI enforces this; no slash command can override it.
 
+**v1 calibration note:** The initial calibration run for the AI Onboarding Concierge eval used cross-model proxy labels (`labelSource: "cross-model-llm"`) rather than blind human labels. Confidence remains `"smoke"`. Blind human calibration is required before promoting to `"statistical"` and before using results for deployment decisions.
+
 ---
 
 ## 9. Offline ↔ Online Positioning
@@ -284,3 +286,4 @@ The strategy agent's Account Activation Rate (claim f07) is the upstream metric 
 |---|---|---|
 | 2026-06-12 | 1.0 | Initial design — 6-step pipeline |
 | 2026-06-12 | 2.0 | 6→4 step pipeline (justified); simulator as explicit entity; model-comparison mode with frontier table; LLM vs Rules routing table; Offline↔Online positioning section; Monitoring & Drift section; calibration smoke vs statistical distinction |
+| 2026-06-12 | 2.1 | §8 Calibration: added v1 calibration note — cross-model proxy labels used, blind human calibration pending |

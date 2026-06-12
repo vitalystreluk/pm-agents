@@ -428,6 +428,36 @@ function cmdRenderReport(args) {
     errors.forEach((er) => console.error(`  - ${er}`)); process.exit(1);
   }
 
+  // compute aggregates from transcript index + intake case metadata
+  const rubricWeights = {
+    'Goal Completion': 0.30, 'Graceful Recovery': 0.20, 'Adversarial Robustness': 0.20,
+    'Conciseness': 0.15, 'Brazilian Portuguese Quality': 0.10, 'Handoff Clarity': 0.05,
+  };
+  const enrichMap = {};
+  if (index) {
+    const intakePath = path.join(run, 'intake.json');
+    const caseMap = {};
+    if (fs.existsSync(intakePath)) {
+      const intake = JSON.parse(fs.readFileSync(intakePath, 'utf8'));
+      for (const c of (intake.cases?.cases || [])) caseMap[c.id] = c;
+    }
+    for (const entry of index.entries) {
+      const key = `${entry.caseId}-${entry.variantId}`;
+      const c   = caseMap[entry.caseId];
+      enrichMap[key] = {
+        transcriptFile: `transcripts/${entry.file}`,
+        transcriptHash: entry.sha256,
+        latencyMs: entry.latencyMs,
+        costUSD:   entry.costUSD,
+        category:  c?.category,
+        segment:   c?.segment?.vertical || 'unknown',
+      };
+    }
+  }
+  computeAggregates(report, rubricWeights, enrichMap);
+  // persist updated report with computed aggregates
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+
   const runId  = path.basename(run);
   const md     = buildMarkdownReport(report, runId);
   const outFile= path.join(run, 'eval-report.md');
@@ -498,15 +528,61 @@ function cmdDemo() {
   console.log('     node evalagent/cli.js render-report');
 }
 
+function cmdIndexTranscripts(args) {
+  const run = resolveRun(args);
+  const transcriptDir = path.join(run, 'transcripts');
+  if (!fs.existsSync(transcriptDir)) {
+    console.error('No transcripts directory found. Run /e3-run first.');
+    process.exit(1);
+  }
+  const files = fs.readdirSync(transcriptDir)
+    .filter((f) => f.endsWith('.json') && f !== 'index.json')
+    .sort();
+
+  if (files.length === 0) {
+    console.error('No transcript files found in transcripts/.');
+    process.exit(1);
+  }
+
+  const entries = [];
+  for (const file of files) {
+    const fp      = path.join(transcriptDir, file);
+    const content = fs.readFileSync(fp, 'utf8');
+    const hash    = sha256(content);
+    let t;
+    try { t = JSON.parse(content); }
+    catch (ex) { console.error(`Cannot parse ${file}: ${ex.message}`); process.exit(1); }
+    entries.push({
+      caseId:    t.caseId    || '',
+      variantId: t.variantId || '',
+      file,
+      sha256:    hash,
+      latencyMs: t.latencyMs  || 0,
+      costUSD:   t.costUSD    || 0,
+      exitState: t.exitState  || '',
+    });
+    console.log(`  indexed: ${file}  ${hash.slice(0, 20)}...`);
+  }
+
+  const indexPath = path.join(transcriptDir, 'index.json');
+  fs.writeFileSync(indexPath, JSON.stringify(
+    { runId: path.basename(run), createdAt: new Date().toISOString(), entries },
+    null, 2
+  ));
+  console.log(`\nindex.json written — ${entries.length} transcripts indexed.`);
+  console.log('Now: node evalagent/cli.js status');
+}
+
 // ---------- main ----------
 const args = parseArgs(process.argv.slice(2));
 const cmd  = args._[0];
 ({
-  init:           cmdInit,
-  status:         cmdStatus,
-  verify:         cmdVerify,
-  'render-report':cmdRenderReport,
-  demo:           cmdDemo,
+  init:                cmdInit,
+  status:              cmdStatus,
+  verify:              cmdVerify,
+  'render-report':     cmdRenderReport,
+  demo:                cmdDemo,
+  'index-transcripts': cmdIndexTranscripts,
 }[cmd] || (() => {
-  console.log('Commands: init | status | verify | render-report | demo');
+  console.log('Commands: init | status | verify | render-report | demo | index-transcripts');
 }))(args);

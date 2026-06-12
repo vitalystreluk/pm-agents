@@ -238,7 +238,9 @@ const evalValidators = {
     if (conf === 'smoke' && n >= 10)
       e.push(err('e2.confidence', `should be "statistical" when nCases=${n} ≥ 10 (hard rule 8)`));
 
-    req(d, 'humanScores', 'object', 'e2', e);
+    // accept proxyLabels as rename of humanScores (cross-model calibration uses proxyLabels)
+    if (!d.humanScores && !d.proxyLabels)
+      e.push(err('e2.humanScores', 'missing (or proxyLabels — accepted alias for cross-model calibration)'));
     req(d, 'llmScores',   'object', 'e2', e);
     req(d, 'agreement',   'object', 'e2', e);
     const passed = req(d, 'calibrationPassed', 'boolean', 'e2', e);
