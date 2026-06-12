@@ -162,4 +162,151 @@ const STEP_ORDER = [
   '04-scoring', '05-monetization', '06-review', '07-synthesis',
 ];
 
-module.exports = { validate, STEP_ORDER };
+// ---- EVAL AGENT VALIDATORS ----
+// Hard rule 8: confidence is set by CLI from N — validator enforces consistency.
+
+const VALID_EXIT_STATES = new Set(['flow-selected', 'abandoned', 'error', 'max-turns-reached']);
+const VALID_CONFIDENCE  = new Set(['smoke', 'statistical']);
+const VALID_CATEGORIES  = new Set(['happy-path', 'edge-case', 'adversarial']);
+const VALID_ROUTING     = new Set(['llm', 'rules-primary']);
+
+const evalValidators = {
+  // e1: intake.json (feature context + case set)
+  e1: (d) => {
+    const e = [];
+    req(d, 'feature', 'string', 'e1', e);
+    req(d, 'rubricFile', 'string', 'e1', e);
+    req(d, 'maxTurnsPerCase', 'number', 'e1', e);
+    req(d, 'userSimulatorModel', 'string', 'e1', e);
+
+    const variants = req(d, 'variants', 'array', 'e1', e) || [];
+    if (variants.length === 0) e.push(err('e1.variants', 'must have ≥1 variant'));
+    variants.forEach((v, i) => {
+      req(v, 'id',            'string', `e1.variants[${i}]`, e);
+      req(v, 'model',         'string', `e1.variants[${i}]`, e);
+      req(v, 'promptVariantId','string', `e1.variants[${i}]`, e);
+    });
+
+    const sc = req(d, 'successCriteria', 'array', 'e1', e) || [];
+    if (sc.length === 0) e.push(err('e1.successCriteria', 'must have ≥1 entry'));
+
+    const cases = d.cases?.cases;
+    if (!Array.isArray(cases)) {
+      e.push(err('e1.cases.cases', 'missing or not an array — run /e1-intake to generate cases'));
+    } else if (cases.length === 0) {
+      e.push(err('e1.cases.cases', 'empty — run /e1-intake to generate cases'));
+    } else {
+      const ids = new Set();
+      cases.forEach((c, i) => {
+        const p = `e1.cases[${i}]`;
+        const id = req(c, 'id', 'string', p, e);
+        if (id) { if (ids.has(id)) e.push(err(p, `duplicate id "${id}"`)); ids.add(id); }
+        req(c, 'label', 'string', p, e);
+        if (!VALID_CATEGORIES.has(c.category))
+          e.push(err(`${p}.category`, 'must be happy-path | edge-case | adversarial'));
+        const eb = req(c, 'expectedBehavior', 'string', p, e);
+        if (eb && eb.length < 20)
+          e.push(err(`${p}.expectedBehavior`, `too short (${eb.length} chars) — must be ≥20 chars`));
+        if (c.category === 'adversarial' && !c.expectedNonBehavior)
+          e.push(err(p, 'adversarial cases require expectedNonBehavior'));
+        if (c.routing && !VALID_ROUTING.has(c.routing))
+          e.push(err(`${p}.routing`, 'must be "llm" or "rules-primary"'));
+        if (c.routing === 'rules-primary' && !c.expectedNonBehavior)
+          e.push(err(p, 'rules-primary cases require expectedNonBehavior'));
+      });
+    }
+    return e;
+  },
+
+  // e2: calibration.json (rubric + human labels + agreement)
+  e2: (d) => {
+    const e = [];
+    const cases = req(d, 'calibrationCases', 'array', 'e2', e) || [];
+    const n = cases.length;
+    req(d, 'nCases', 'number', 'e2', e);
+    if (d.nCases !== undefined && d.nCases !== n)
+      e.push(err('e2.nCases', `nCases=${d.nCases} but calibrationCases has ${n} entries`));
+    if (n < 5)
+      e.push(err('e2.calibrationCases', `must have ≥5 cases (found ${n}) — 5 for smoke test, ≥10 for statistical`));
+
+    // Hard rule 8: confidence is derived from N
+    const conf = d.confidence;
+    if (!VALID_CONFIDENCE.has(conf))
+      e.push(err('e2.confidence', 'must be "smoke" or "statistical"'));
+    if (conf === 'statistical' && n < 10)
+      e.push(err('e2.confidence', `cannot be "statistical" when nCases=${n} — requires ≥10 (hard rule 8)`));
+    if (conf === 'smoke' && n >= 10)
+      e.push(err('e2.confidence', `should be "statistical" when nCases=${n} ≥ 10 (hard rule 8)`));
+
+    req(d, 'humanScores', 'object', 'e2', e);
+    req(d, 'llmScores',   'object', 'e2', e);
+    req(d, 'agreement',   'object', 'e2', e);
+    const passed = req(d, 'calibrationPassed', 'boolean', 'e2', e);
+    if (passed === false && (!d.failingCriteria || d.failingCriteria.length === 0))
+      e.push(err('e2.failingCriteria', 'must list failing criteria when calibrationPassed is false'));
+    return e;
+  },
+
+  // e3: transcripts/index.json (simulator output index)
+  e3: (d) => {
+    const e = [];
+    req(d, 'runId', 'string', 'e3', e);
+    const entries = req(d, 'entries', 'array', 'e3', e) || [];
+    if (entries.length === 0) e.push(err('e3.entries', 'empty — no transcripts written yet'));
+    entries.forEach((entry, i) => {
+      const p = `e3.entries[${i}]`;
+      req(entry, 'caseId',    'string', p, e);
+      req(entry, 'variantId', 'string', p, e);
+      req(entry, 'file',      'string', p, e);
+      req(entry, 'sha256',    'string', p, e);
+      req(entry, 'latencyMs', 'number', p, e);
+      req(entry, 'costUSD',   'number', p, e);
+      if (!VALID_EXIT_STATES.has(entry.exitState))
+        e.push(err(`${p}.exitState`, 'must be flow-selected | abandoned | error | max-turns-reached'));
+    });
+    return e;
+  },
+
+  // e4: 04-report.json (judgments + frontier table)
+  e4: (d) => {
+    const e = [];
+    req(d, 'runId',        'string', 'e4', e);
+    req(d, 'feature',      'string', 'e4', e);
+    req(d, 'calibrationRef','string','e4', e);
+
+    const conf = d.calibrationConfidence;
+    if (!VALID_CONFIDENCE.has(conf))
+      e.push(err('e4.calibrationConfidence', 'must be "smoke" or "statistical"'));
+
+    const judgments = req(d, 'judgments', 'array', 'e4', e) || [];
+    if (judgments.length === 0) e.push(err('e4.judgments', 'empty — run /e4-judge'));
+    judgments.forEach((j, i) => {
+      const p = `e4.judgments[${i}]`;
+      req(j, 'caseId',         'string', p, e);
+      req(j, 'variantId',      'string', p, e);
+      req(j, 'transcriptFile', 'string', p, e);
+      req(j, 'transcriptHash', 'string', p, e);
+      req(j, 'scores',         'object', p, e);
+      const v = j.passFailVerdict;
+      if (v && !['pass', 'fail', 'marginal'].includes(v))
+        e.push(err(`${p}.passFailVerdict`, 'must be pass | fail | marginal'));
+      if (v === 'fail' && !j.passFailRationale)
+        e.push(err(p, 'passFailRationale required when verdict is fail'));
+    });
+
+    req(d, 'frontierTable', 'array', 'e4', e);
+    const winner = req(d, 'winner', 'object', 'e4', e);
+    if (winner) req(winner, 'quality', 'string', 'e4.winner', e);
+    return e;
+  },
+};
+
+function validateEval(stepKey, data) {
+  const v = evalValidators[stepKey];
+  if (!v) return [`no eval validator for step "${stepKey}"`];
+  return v(data);
+}
+
+const EVAL_STEP_ORDER = ['e1', 'e2', 'e3', 'e4'];
+
+module.exports = { validate, STEP_ORDER, validateEval, EVAL_STEP_ORDER };
