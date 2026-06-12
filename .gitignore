@@ -5,3 +5,6 @@ output/*
 *.pdf
 .DS_Store
 .claude/settings.local.json
+
+!docs/**/*.pdf
+!docs/**/*.docx
