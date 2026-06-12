@@ -1,4 +1,4 @@
-# Eval Agent — Architecture Design
+# Eval Agent — Architecture Design v2
 
 **Shared spine:** AI conclusions without traceability to data are opinions.  
 For the Eval Agent this means: a judge verdict without a link to the exact transcript it scored is not a verdict — it is an assertion.
@@ -11,73 +11,147 @@ The Eval Agent answers one question: *does this LLM feature behave the way we sa
 
 Target case: **AI Onboarding Concierge** — a conversational bot that walks new BotConversa users (Brazilian SMB owners of beauty salons, clinics, pet shops) from signup to their first live WhatsApp flow within the 15-day trial window. Success is measured by Account Activation Rate (claim f07 in the strategy run).
 
+**Important positioning:** The Concierge does not yet exist as a deployed product. This is pre-implementation evaluation — the eval agent generates simulated transcripts (see §3), scores them, and produces evidence to guide prompt design decisions before any production traffic is touched.
+
 The agent is not a unit test harness. It is an evidence chain: every quality judgment traces back to a saved transcript; every aggregate score traces back to per-case judgments; every recommendation traces back to aggregate scores. Nothing floats free.
 
 ---
 
-## 2. Pipeline steps
+## 2. Pipeline: 4 steps
 
-Six steps, alternating deterministic CLI and LLM slash-command — same pattern as the strategy agent.
+Four steps, alternating deterministic CLI and LLM slash-command — same pattern as the strategy agent.
 
 ```
-e1-intake     CLI init     Feature under test: description, success criteria, target users
-e2-cases      LLM          Generate eval case set (happy path, edge, adversarial)
-e3-calibrate  LLM + CLI    Score 5 hand-labeled calibration cases; CLI validates agreement
-e4-run        CLI          Execute concierge against all cases; save transcripts
-e5-judge      LLM          Score each transcript against calibrated rubric
-e6-report     CLI          Aggregate scores; render report with failure taxonomy
+e1-intake     CLI + LLM    Feature context + case set (intake form + case generation in one step)
+e2-calibrate  LLM + CLI    Human labels calibration cases; CLI validates LLM agreement; gate
+e3-run        CLI + LLM    Simulator generates transcripts across model/prompt variants
+e4-judge      LLM + CLI    LLM scores transcripts; CLI aggregates and renders frontier report
 ```
+
+### Why 4, not 6
+
+The original v1 design had 6 steps. Two merges were made:
+
+**e1-intake + e2-cases → e1-intake:** Cases must be defined before a run starts — they are not a pipeline output, they are a pipeline input. Treating case generation as a mid-pipeline step created a phantom dependency (you cannot begin calibration without cases, so intake and cases are logically atomic). The merged e1 step captures the feature context AND imports or generates the case set in one operation.
+
+**e5-judge + e6-report → e4-judge:** Judging without immediate aggregation produces a dangling intermediate state that adds a step boundary without adding a safeguard. The only thing that can happen between judging and reporting is human interference with scores — which the hard rules prohibit anyway. Merging them removes the false checkpoint while preserving the deterministic/LLM split: the LLM writes per-case scores, the CLI computes aggregates and the frontier table.
 
 ### Step boundaries: what is deterministic vs LLM
 
 | Step | Owner | Why |
 |---|---|---|
-| e1-intake | CLI | Structured intake — no judgment required, just schema validation |
-| e2-cases | LLM (`/e2-cases`) | Generating diverse, adversarial, realistic cases requires creativity and domain knowledge |
-| e3-calibrate | LLM + CLI gate | LLM scores the 5 hand-labeled calibration cases; CLI computes agreement and **blocks e5 if agreement < 75%** |
-| e4-run | CLI | Deterministic: send each case's turn sequence to the concierge API, record the full response, compute token cost. No judgment. |
-| e5-judge | LLM (`/e5-judge`) | LLM applies the rubric to each transcript; must reference calibration scores in its preamble |
-| e6-report | CLI | Deterministic aggregation, ranking, cost summary, DOCX render |
+| e1-intake | CLI (structure) + LLM (`/e1-cases`) | CLI captures feature context; LLM generates cases within declared constraints |
+| e2-calibrate | LLM + CLI gate | LLM scores calibration cases; CLI computes agreement and **blocks e3 if < 75%** |
+| e3-run | CLI (orchestration) + LLM (simulator) | CLI sequences turns; LLM plays bot and user per simulator protocol (§3) |
+| e4-judge | LLM (`/e4-judge`) + CLI (aggregation) | LLM writes per-case scores; CLI computes weighted totals and frontier table |
 
-**Hard rule:** LLM steps read only the state written by previous steps. e5-judge cannot call the concierge. e4-run cannot score anything. The boundary is enforced by the slash-command definitions, not by trust.
+**Hard rule:** LLM steps read only the state written by previous steps. e4-judge cannot call the simulator. e3-run cannot score anything. The boundary is enforced by slash-command definitions, not by trust.
 
 ---
 
-## 3. Traceability chain
+## 3. The Simulator (explicit entity)
 
-Every judgment in the system links to exactly one source artifact. The chain is:
+Because the Concierge is pre-implementation, e3-run cannot call a deployed bot. Instead, transcripts are generated by a two-pass simulator:
+
+**Pass 1 — LLM-plays-bot:** The target model (e.g. `claude-haiku-4-5-20251001`) receives the candidate system prompt and generates assistant turns. This is the feature under test — different prompt variants and model IDs are compared across variants.
+
+**Pass 2 — LLM-plays-user:** A second LLM call (a fixed "user simulator" model, typically a different model from the one being tested) generates user turns according to the case's `persona` and `scenario`. The user simulator's job is to be realistic, not adversarial — adversarial behavior is encoded in the case's scripted turn sequence, not improvised by the simulator.
+
+**Simulator protocol:**
+1. CLI injects turn 1 from the case's `turns` array (the scripted user opener).
+2. LLM-plays-bot generates assistant turn 1; CLI records latency and token cost.
+3. If the case has a scripted turn 2 (user), inject it. If not, LLM-plays-user generates the next user turn from the persona context.
+4. Repeat until `exitState` is reached or `maxTurnsPerCase` is hit.
+5. CLI sets `exitState` deterministically from terminal signal detection (never from LLM output).
+
+**Why this matters for eval validity:** Simulated transcripts are not perfect proxies for real user conversations. The eval agent's job is to identify **prompt-design failures** (things the bot gets reliably wrong regardless of user variation) before deployment. Failures that only emerge with real users at scale belong to online monitoring (§9).
+
+**Transcript immutability applies to simulator output identically** to real transcripts: written once by e3-run, SHA-256 stored in the index file, never modified. Any post-hoc edit invalidates the hash and blocks rendering.
+
+---
+
+## 4. Model-Comparison Mode
+
+e3-run executes the same case set across multiple model/prompt variants. This is the primary use case for pre-implementation evaluation: the product team does not yet know which model to use for the Concierge.
+
+**Variants declared in e1 `intake.json`:**
+```json
+"variants": [
+  { "id": "haiku-v1",  "model": "claude-haiku-4-5-20251001", "promptVariantId": "prompt-v1" },
+  { "id": "sonnet-v1", "model": "claude-sonnet-4-6",         "promptVariantId": "prompt-v1" },
+  { "id": "open-v1",   "model": "placeholder-open-weight",   "promptVariantId": "prompt-v1" }
+]
+```
+
+**e4-judge outputs a frontier table** (not a winner declaration):
+
+| Variant | Composite Score | Avg Latency (ms) | Avg Cost/case (USD) |
+|---|---|---|---|
+| haiku-v1 | 3.4 | 820 | 0.0004 |
+| sonnet-v1 | 4.1 | 1840 | 0.0014 |
+| open-v1 | 3.1 | 640 | 0.0001 |
+
+The report presents this as a **Pareto frontier** — quality vs cost vs latency — and flags which variant wins on each axis. The product team decides the tradeoff; the eval agent does not declare a winner across dimensions.
+
+**Hard rule:** A variant cannot be declared the quality winner if its weighted score advantage over the next-best variant has a confidence interval that overlaps zero. The report renders `"winner": "inconclusive"` in that case.
+
+---
+
+## 5. LLM vs Rules: Routing by Intent
+
+Not every behavior in the Concierge requires LLM judgment. The routing decision — LLM vs deterministic rule — must be explicit, because rules are faster, cheaper, auditable, and cannot hallucinate.
+
+| Intent | Routing | Rationale |
+|---|---|---|
+| Vertical identification | LLM | Requires natural-language inference across mixed signals ("salão" vs "clínica" vs ambiguous descriptions) |
+| Template recommendation | LLM | Requires combining vertical + prior context + user preference signals across turns |
+| Price question | Rules | Price config is a lookup table; the answer is deterministic and must not drift |
+| Human escalation trigger | Rules | Escape hatch is a mandatory compliance feature; deterministic detection prevents hallucinated handoffs |
+| Language detection | Rules | Library-level (langdetect or equivalent); not an LLM task |
+| Known injection patterns | Rules (primary) + LLM (fallback) | Regex-matched known injections are caught by rules; novel phrasings fall to LLM judgment |
+| Feature availability ("does X exist?") | Rules | Known feature set is a config lookup; LLM must not improvise feature existence |
+| Returning user recognition | Rules | Session state check — deterministic when session data is available |
+
+**For eval purposes:** cases involving deterministic-routed intents are marked `"routing": "rules-primary"` in `cases.json`. The judge for these cases evaluates whether the rule fired correctly and what the LLM said around it — not the LLM's ability to reason about the intent itself.
+
+---
+
+## 6. Traceability chain
+
+Every judgment in the system links to exactly one source artifact:
 
 ```
-eval case (cases.json)
-  → transcript (transcripts/<runId>/<caseId>.json)
-    → judgment (05-judge.json, entry per caseId)
-      → aggregate (06-report.json, per criterion and overall)
+eval case (cases.json, part of e1-intake)
+  → transcript (transcripts/<runId>/<caseId>-<variantId>.json, written by e3-run)
+    → judgment (04-report.json, entry per caseId × variantId)
+      → frontier table (04-report.json, per-variant summary)
         → rendered report (eval-report.docx)
 ```
 
 ### How verdict-to-transcript linking works
 
-`05-judge.json` stores one judgment object per case:
+`04-report.json` stores one judgment object per (case × variant):
 
 ```json
 {
   "caseId": "case-03",
-  "transcriptFile": "transcripts/botconversa-eval-2026-06-12/case-03.json",
+  "variantId": "sonnet-v1",
+  "transcriptFile": "transcripts/botconversa-eval-2026-06-12/case-03-sonnet-v1.json",
   "transcriptHash": "sha256:a3f9...",
   "scores": { "Goal Completion": 4, "Graceful Recovery": 3, ... },
   "weightedTotal": 3.6,
+  "latencyMs": 1840,
+  "costUSD": 0.0014,
   "flags": ["verbosity-warning"],
   "rationale": "..."
 }
 ```
 
-`transcriptHash` is the SHA-256 of the transcript file at the time of judging. The CLI (`node evalagent/cli.js verify`) recomputes hashes at any time to confirm no transcript was edited after scoring. A hash mismatch is a pipeline integrity failure — the report cannot render until it is resolved.
-
-This mirrors the strategy agent's claim ledger: just as `claims.json` is regenerated from step files (never hand-edited), `transcripts/` files are written once by e4-run and never modified. Judge verdicts are an overlay, not an edit.
+`transcriptHash` is the SHA-256 of the transcript file at the time of judging. The CLI (`node evalagent/cli.js verify`) recomputes hashes at any time to confirm no transcript was edited after scoring. A hash mismatch is a pipeline integrity failure — the report cannot render until resolved.
 
 ---
 
-## 4. File and state layout
+## 7. File and state layout
 
 ```
 evalagent/
@@ -85,85 +159,110 @@ evalagent/
   README.md                  — existing scaffold
   DESIGN.md                  — this file
   SCHEMAS.md                 — step output schemas and hard rules
-  RUBRIC-DRAFT.md            — LLM-as-a-Judge rubric (first draft, to be calibrated)
+  RUBRIC-DRAFT.md            — LLM-as-a-Judge rubric (to be calibrated)
   CASES-DRAFT.md             — 15 seed eval cases
 
 output/
   <eval-run-id>/             — e.g. botconversa-eval-2026-06-12/
-    intake.json              — e1 output: feature description, success criteria
-    cases.json               — e2 output: full eval case set
-    calibration.json         — e3 output: human labels + LLM agreement scores
+    intake.json              — e1 output: feature context + full case set
+    calibration.json         — e2 output: human labels + LLM agreement + confidence level
     transcripts/
-      case-01.json           — one file per case; written by e4, never modified
-      case-02.json
+      index.json             — SHA-256 of every transcript; integrity anchor
+      case-01-haiku-v1.json  — one file per (case × variant); written by e3, never modified
+      case-01-sonnet-v1.json
       ...
-    05-judge.json            — e5 output: per-case verdicts with transcript references
-    06-report.json           — e6 output: aggregates, rankings, failure taxonomy
-    eval-report.docx         — rendered from 06-report.json
+    04-report.json           — e4 output: per-case judgments + frontier table
+    eval-report.docx         — rendered from 04-report.json
     eval-report.pdf
 ```
 
 Run IDs follow the same convention as the strategy agent: `<product>-eval-<YYYY-MM-DD>`. If multiple runs exist on the same date, append a sequence number.
 
-### Transcript file format (e4 output)
-
-```json
-{
-  "caseId": "case-03",
-  "caseLabel": "confused-user-wrong-language",
-  "variant": "prompt-v1",
-  "model": "claude-sonnet-4-6",
-  "turns": [
-    { "role": "user",    "content": "...", "tokenCount": 42 },
-    { "role": "assistant","content": "...", "tokenCount": 187 }
-  ],
-  "totalTokens": 459,
-  "costUSD": 0.0014,
-  "durationMs": 1840,
-  "exitState": "flow-selected | abandoned | error | max-turns-reached",
-  "writtenAt": "2026-06-12T14:33:01Z"
-}
-```
-
-`exitState` is set deterministically by the CLI based on whether the final assistant turn contains a recognized terminal signal (flow selected, explicit exit, error). This is the equivalent of the strategy agent's terminal-state enforcement — the same gaming risk applies: if `exitState` is judged by the LLM rather than detected by the CLI, the judge can inflate completion rates.
-
 ---
 
-## 5. Calibration gate (e3)
+## 8. Calibration gate (e2)
 
 The calibration step is the most important structural safeguard.
 
 **Why it exists:** LLM judges have well-documented biases (position bias, verbosity preference, self-preference). A rubric that has not been tested against hand-labeled cases is a rubric that may be measuring something different from what it claims to measure.
 
+### Smoke test vs statistical calibration
+
+| Mode | N cases | `confidence` value | What it tells you |
+|---|---|---|---|
+| Smoke | 5 | `"smoke"` | Detects gross misalignment (judge scoring 1s as 5s). Catches rubric category errors, not rubric accuracy. |
+| Statistical | ≥10 | `"statistical"` | 75% within-1-point agreement has actual statistical weight. Meaningful gate. |
+
+**The initial 5-case calibration set is a smoke test.** It establishes that the rubric is not broken, not that the rubric is accurate. To promote calibration to `"statistical"`, at least 10 cases must be hand-labeled. The `confidence` field in `calibration.json` is set by the CLI based on N — the human cannot override it.
+
 **How it works:**
-1. Evaluator (human) reads 5 cases from `cases.json` and scores each on every rubric criterion. Scores written to `calibration.json` as `humanScores`.
-2. The `/e3-calibrate` slash command sends the same 5 cases + transcripts to the LLM judge and records `llmScores`.
-3. CLI computes agreement: for each criterion, % of cases where |human score − LLM score| ≤ 1 (within-1-point agreement, the standard for ordinal rubrics).
-4. **Gate:** if any criterion's agreement is below 75%, the CLI blocks e5-judge and prints the criterion name, the disagreement cases, and the rubric anchor that may be ambiguous. The rubric must be revised and e3 re-run before proceeding.
-5. Once agreement ≥ 75% on all criteria, `calibration.json` records `calibrationPassed: true` with date and agreement percentages. e5-judge reads this and references the calibration run ID in every verdict.
+1. Evaluator (human) reads calibration cases and scores each on every rubric criterion. Scores written to `calibration.json` as `humanScores`.
+2. `/e2-calibrate` sends the same cases to the LLM judge and records `llmScores`.
+3. CLI computes per-criterion agreement: % of cases where |human − LLM| ≤ 1.
+4. **Gate:** if any criterion's agreement < 75%, CLI blocks e3-run, prints the failing criterion, the disagreement cases, and which rubric anchor may be ambiguous. Rubric must be revised and e2 re-run.
+5. Once ≥ 75% on all criteria: `calibrationPassed: true`, `confidence: "smoke" | "statistical"`, agreement percentages stored.
 
-**Hard rule:** `calibrationPassed` in `calibration.json` must be `true` before e5-judge will run. The CLI enforces this; the slash command cannot override it.
-
----
-
-## 6. Variant comparison (A/B eval)
-
-The pipeline supports comparing two variants of the concierge (different prompts, different models, or different flow configurations). Variants are declared in `intake.json`. e4-run executes all cases against all declared variants. e5-judge scores all transcripts. e6-report produces a per-variant comparison table and marks the winning variant, its confidence interval, and the specific cases where the variants diverged most.
-
-**Hard rule:** a variant cannot be declared the winner if the confidence interval on its weighted score advantage overlaps zero. The CLI enforces this; the report renders "inconclusive" instead of a winner.
+**Hard rule:** `calibrationPassed: true` must exist in `calibration.json` before e3-run executes. The CLI enforces this; no slash command can override it.
 
 ---
 
-## 7. What the Eval Agent does NOT do
+## 9. Offline ↔ Online Positioning
+
+This agent is an **offline eval** — it evaluates simulated transcripts before the Concierge is deployed.
+
+| Dimension | Offline (this agent) | Online (production) |
+|---|---|---|
+| When | Before deployment; per prompt change | After deployment; continuous |
+| What | Simulated transcripts via simulator | Real user conversations |
+| Verdict | Composite LLM-judge score | Containment Rate, handoff rate, activation rate, TTFV |
+| Latency | Hours (batch eval run) | Real-time dashboards |
+| Coverage | All cases in case set (complete, controlled) | Real user distribution (long tail, skewed) |
+| Failure signal | Score < 3.5; specific criterion failures | CR decline, activation rate drop |
+
+**Validation plan — is the offline score a leading indicator?**
+
+1. For the first production deployment, record the eval composite score for the chosen variant.
+2. Track online CR and activation rate for the first 30 days after deployment.
+3. After subsequent prompt iterations, check whether eval score changes predict CR changes in the same direction.
+4. If eval score changes do not correlate with CR changes (in direction) across ≥3 prompt iterations, the rubric is measuring something users do not care about — revise criteria or weights.
+
+**What offline eval cannot catch:** Long-tail personas not covered by the 15-case set; production infrastructure failures (latency spikes, context truncation); behaviors that only emerge in many-turn history at scale. These belong to online monitoring (§10).
+
+---
+
+## 10. Monitoring & Drift (Roadmap)
+
+No code in this design phase. These mechanisms are implemented when the Concierge reaches production.
+
+**Canary set:** 5 fixed cases (1 happy-path, 1 confused-user, 1 adversarial, 1 historical failure, 1 regression from a prior prompt incident) re-run on every prompt change and weekly on a schedule. Canary composite scores are tracked over time. If drift exceeds 0.5 points from the post-calibration baseline, recalibration is triggered automatically.
+
+**Recalibration trigger:** Rubric anchors must be updated when (a) canary drift exceeds threshold, (b) a new product capability changes what "good" looks like (e.g. a new vertical template is added), or (c) the judge model is upgraded to a new version. Recalibration requires re-labeling ≥10 cases to restore `confidence: "statistical"`.
+
+**Complaint-driven case mining:** When CS tickets, Reclame Aqui complaints, or production transcripts surface failure modes not covered by the case set, new cases are added via `node evalagent/cli.js add-case`. New cases are tagged `"source": "complaint-mined"` in their `segment` field and tracked as `"calibrationStatus": "unvalidated"` until a calibration run includes them.
+
+**`segment` field on cases:** Every case in `cases.json` carries:
+```json
+"segment": {
+  "vertical": "beauty | clinic | petshop | mixed | unknown",
+  "language": "pt-BR | en | mixed | other",
+  "source": "designed | complaint-mined | canary | regression"
+}
+```
+This enables per-segment score breakdowns in the report — identifying whether the Concierge is underperforming on clinic cases or English-language inputs without those failures being averaged away in the overall score.
+
+---
+
+## 11. What the Eval Agent does NOT do
 
 - It does not generate synthetic training data.
-- It does not run the production concierge in production (e4-run calls a sandboxed endpoint or a local model).
-- It does not auto-correct the concierge prompt based on eval results — that decision belongs to a human reviewing the report.
-- It does not make web requests during steps e3–e6. All research and context is fixed at e1-intake.
+- It does not call the production Concierge endpoint (e3-run uses the simulator or a sandboxed endpoint only).
+- It does not auto-correct the concierge prompt — that decision belongs to a human reviewing the report.
+- It does not make web requests during steps e2–e4. All context is fixed at e1-intake.
+- It does not declare a winner across quality, cost, and latency simultaneously — the frontier table presents the tradeoff, not the decision.
 
 ---
 
-## 8. Relationship to the strategy agent
+## 12. Relationship to the strategy agent
 
 The Eval Agent is downstream of the strategy agent, not parallel to it.
 
@@ -176,3 +275,12 @@ The Eval Agent is downstream of the strategy agent, not parallel to it.
 | `node strategy/cli.js status` | `node evalagent/cli.js status` |
 
 The strategy agent's Account Activation Rate (claim f07) is the upstream metric the Concierge is trying to move. The Eval Agent's job is to generate evidence that the Concierge actually does or does not move it in controlled conditions before it touches production traffic.
+
+---
+
+## Changelog
+
+| Date | Version | Change |
+|---|---|---|
+| 2026-06-12 | 1.0 | Initial design — 6-step pipeline |
+| 2026-06-12 | 2.0 | 6→4 step pipeline (justified); simulator as explicit entity; model-comparison mode with frontier table; LLM vs Rules routing table; Offline↔Online positioning section; Monitoring & Drift section; calibration smoke vs statistical distinction |

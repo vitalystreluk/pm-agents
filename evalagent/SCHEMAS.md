@@ -1,7 +1,9 @@
-# Eval Agent — Step Output Schemas and Hard Rules
+# Eval Agent — Step Output Schemas and Hard Rules v2
 
 Schemas are enforced by `node evalagent/cli.js status` after every step.  
 Hard rules are constraints the CLI will reject — not warnings, not advisory notes.
+
+Pipeline: **e1-intake → e2-calibrate → e3-run → e4-judge** (4 steps; see DESIGN.md §2 for 6→4 justification).
 
 ---
 
@@ -9,19 +11,20 @@ Hard rules are constraints the CLI will reject — not warnings, not advisory no
 
 These apply across all steps. Violations block the next step from running.
 
-1. **No verdict without a transcript reference.** Every judgment object in `05-judge.json` must carry `transcriptFile` and `transcriptHash`. A score with no linked transcript is an assertion, not evidence.
-2. **No judge run without calibration.** `calibration.json` must exist and contain `calibrationPassed: true` before e5-judge executes. Agreement threshold: ≥75% within-1-point on every rubric criterion.
-3. **No winner declared when confidence interval overlaps zero.** e6-report must compute a bootstrap or exact CI on the variant score advantage. If the CI includes 0, the report renders `"winner": "inconclusive"`.
-4. **Every eval case must have an `expectedBehavior` field.** A case without an expected behavior cannot be scored — the judge would be comparing against nothing. (Equivalent to the strategy rule: a roadmap initiative without a `successMetric` is a feature catalog.)
-5. **`exitState` is set by CLI only, never by the LLM.** The CLI determines exit state from terminal signals in the transcript (flow-selected, explicit exit, error token, max-turns-reached). If the LLM sets or overrides `exitState`, the transcript is invalid.
-6. **Transcripts are immutable after e4-run writes them.** Any modification invalidates the `transcriptHash` stored in `05-judge.json`. The `verify` command detects this and blocks rendering.
-7. **No quantitative value in report prose without a score record.** The rendered report references per-case scores via `{{score:caseId:criterion}}` tokens, resolved by the renderer from `05-judge.json`. Raw invented numbers in narrative are rejected.
+1. **No verdict without a transcript reference.** Every judgment object in `04-report.json` must carry `transcriptFile` and `transcriptHash`. A score with no linked transcript is an assertion, not evidence.
+2. **No judge run without calibration.** `calibration.json` must exist and contain `calibrationPassed: true` before e3-run executes. Agreement threshold: ≥75% within-1-point on every rubric criterion.
+3. **No quality winner declared when confidence interval overlaps zero.** e4-judge must compute a CI on the variant score advantage. If the CI includes 0, the report renders `"winner": "inconclusive"`. This rule applies to the quality dimension only — cost and latency winners are always deterministic.
+4. **Every eval case must have an `expectedBehavior` field.** A case without an expected behavior cannot be scored — the judge would be comparing against nothing.
+5. **`exitState` is set by CLI only, never by the LLM.** The CLI determines exit state from terminal signals in the transcript. If the LLM sets or overrides `exitState`, the transcript is invalid.
+6. **Transcripts are immutable after e3-run writes them.** Any modification invalidates the `transcriptHash` stored in `04-report.json`. The `verify` command detects this and blocks rendering.
+7. **No quantitative value in report prose without a score record.** The rendered report references per-case scores via `{{score:caseId:criterion}}` tokens resolved by the renderer from `04-report.json`. Raw invented numbers in narrative are rejected.
+8. **`confidence` in `calibration.json` is set by CLI from N.** If N < 10, `confidence` is forced to `"smoke"` regardless of what the human writes. The human cannot override this field.
 
 ---
 
-## e1 — intake.json
+## e1 — intake.json (feature context + case set)
 
-The feature under test. Written by CLI init; no LLM involvement.
+Written by CLI init + `/e1-cases` LLM slash command. The case set is generated in the same step as intake — they are not separable (cases are pipeline input, not pipeline output).
 
 ```json
 {
@@ -36,79 +39,80 @@ The feature under test. Written by CLI init; no LLM involvement.
   ],
   "variants": [
     {
-      "id": "string — variant identifier, e.g. prompt-v1",
+      "id": "string — variant identifier, e.g. haiku-v1",
+      "model": "string — model ID used as bot, e.g. claude-haiku-4-5-20251001",
+      "promptVariantId": "string — which prompt version is loaded, e.g. prompt-v1",
       "description": "string — what differs in this variant",
       "endpoint": "string — sandboxed API endpoint or local model path"
     }
   ],
+  "userSimulatorModel": "string — model used for LLM-plays-user pass in e3 simulator",
   "rubricFile": "string — path to the rubric in use (e.g. evalagent/RUBRIC-DRAFT.md)",
   "maxTurnsPerCase": "number — hard ceiling on conversation turns before exitState=max-turns-reached",
+  "cases": {
+    "cases": [
+      {
+        "id": "string — stable identifier, e.g. case-01",
+        "label": "string — human-readable slug, e.g. happy-path-beauty-salon",
+        "category": "happy-path | edge-case | adversarial",
+        "subcategory": "string — e.g. confused-user, wrong-language, prompt-injection, off-topic",
+        "routing": "llm | rules-primary",
+        "segment": {
+          "vertical": "beauty | clinic | petshop | mixed | unknown",
+          "language": "pt-BR | en | mixed | other",
+          "source": "designed | complaint-mined | canary | regression"
+        },
+        "persona": {
+          "description": "string — who this user is (vertical, tech comfort, urgency)",
+          "language": "string — pt-BR | en | mixed | other"
+        },
+        "turns": [
+          { "role": "user", "content": "string" }
+        ],
+        "expectedBehavior": "string — what the concierge MUST do to pass (specific, testable, ≥20 chars)",
+        "expectedNonBehavior": "string — what the concierge must NOT do (required for adversarial and rules-primary cases)",
+        "passCriteria": "string — minimum score on which criterion(a) constitutes a pass",
+        "notes": "string — optional context for the judge"
+      }
+    ],
+    "summary": {
+      "total": "number",
+      "byCategory": {
+        "happy-path": "number",
+        "edge-case": "number",
+        "adversarial": "number"
+      }
+    }
+  },
   "createdAt": "ISO 8601 datetime",
   "author": "string"
 }
 ```
 
 **Hard rules for e1:**
-- `variants` must have ≥1 entry.
+- `variants` must have ≥1 entry. Each variant must specify `model` and `promptVariantId`.
 - `successCriteria` must have ≥1 entry with both fields non-empty.
 - `rubricFile` must point to a file that exists at the time of init.
-
----
-
-## e2 — cases.json
-
-The eval case set. Generated by `/e2-cases` (LLM), validated by CLI.
-
-```json
-{
-  "cases": [
-    {
-      "id": "string — stable identifier, e.g. case-01",
-      "label": "string — human-readable slug, e.g. happy-path-beauty-salon",
-      "category": "happy-path | edge-case | adversarial",
-      "subcategory": "string — e.g. confused-user, wrong-language, prompt-injection, off-topic",
-      "persona": {
-        "description": "string — who this user is (vertical, tech comfort, urgency)",
-        "language": "string — pt-BR | en | mixed | other"
-      },
-      "turns": [
-        { "role": "user", "content": "string" }
-      ],
-      "expectedBehavior": "string — what the concierge MUST do to pass this case (specific, testable)",
-      "expectedNonBehavior": "string — what the concierge must NOT do (optional but required for adversarial cases)",
-      "passCriteria": "string — the minimum score on which criterion(a) constitutes a pass",
-      "notes": "string — optional context for the judge"
-    }
-  ],
-  "summary": {
-    "total": "number",
-    "byCategory": {
-      "happy-path": "number",
-      "edge-case": "number",
-      "adversarial": "number"
-    }
-  }
-}
-```
-
-**Hard rules for e2:**
-- Every case must have `expectedBehavior` — non-empty string, minimum 20 characters. Vague placeholders ("bot should respond well") are rejected by length check; reviewers must re-write them.
-- Adversarial cases must also have `expectedNonBehavior`.
+- `userSimulatorModel` must be non-empty (set to a different model from the default bot variant when possible, to reduce self-preference bias).
+- Every case must have `expectedBehavior` — non-empty string, minimum 20 characters.
+- Adversarial cases and `routing: "rules-primary"` cases must also have `expectedNonBehavior`.
 - `category` must be one of the three enumerated values.
 - Minimum distribution: ≥3 happy-path, ≥4 edge-case, ≥3 adversarial (for a 15-case set).
-- `turns` must have at least one user turn. Cases with no turns cannot be executed.
+- `turns` must have at least one user turn.
 - `id` must be unique across the set.
 
 ---
 
-## e3 — calibration.json
+## e2 — calibration.json (rubric + human labels + agreement)
 
 Hand-labeled calibration cases + LLM agreement scores.  
-Written jointly: human fills `humanScores`, CLI runs LLM judge on the same cases and computes agreement.
+Written jointly: human fills `humanScores`, CLI runs the LLM judge on the same cases, computes agreement, and sets `calibrationPassed` and `confidence`.
 
 ```json
 {
   "calibrationCases": ["case-id-1", "case-id-2", "..."],
+  "nCases": "number — count of calibration cases; CLI uses this to determine confidence",
+  "confidence": "smoke | statistical",
   "rubricCriteria": ["string — criterion name", "..."],
   "humanScores": {
     "case-id-1": {
@@ -128,67 +132,106 @@ Written jointly: human fills `humanScores`, CLI runs LLM judge on the same cases
       "avgAbsError": "number — mean absolute error across calibration cases"
     }
   },
-  "calibrationPassed": "boolean",
+  "calibrationPassed": "boolean — set by CLI; true iff all criteria have withinOnePct ≥ 75",
   "failingCriteria": ["string — criteria that did not reach 75% within-1 agreement"],
   "calibrationDate": "ISO 8601 date",
+  "judgeModel": "string — which LLM was used as the judge in this calibration run",
   "notes": "string — rubric amendments made after calibration to improve agreement"
 }
 ```
 
-**Hard rules for e3:**
-- `calibrationCases` must contain ≥5 case IDs, all present in `cases.json`.
+**Hard rules for e2:**
+- `calibrationCases` must contain ≥5 case IDs, all present in the case set in `intake.json`.
 - `humanScores` must cover all criteria for all calibration cases — no partial labels.
 - `llmScores` must cover the same set.
-- `calibrationPassed` is set by the CLI, not by the human or LLM. It is `true` iff every criterion has `withinOnePct ≥ 75`.
-- If `calibrationPassed` is `false`, `failingCriteria` must be non-empty and list the specific criteria that failed.
-- The CLI blocks e4-run and e5-judge until `calibrationPassed` is `true`.
+- `calibrationPassed` is set by the CLI, not by the human or LLM.
+- `confidence` is set by the CLI: `"smoke"` if `nCases < 10`, `"statistical"` if `nCases ≥ 10`. Human cannot override.
+- If `calibrationPassed` is `false`, `failingCriteria` must be non-empty.
+- The CLI blocks e3-run until `calibrationPassed` is `true`.
+- A `confidence: "smoke"` calibration that passes does NOT block e3-run, but the report must display a smoke-test warning in its header: "Calibration: SMOKE TEST (N=5). Statistical validity requires N≥10."
 
 ---
 
-## e4 — transcripts/<runId>/<caseId>.json
+## e3 — transcripts/ (simulator output)
 
-One file per (case × variant) combination. Written by CLI; never modified after creation.
+One file per (case × variant) combination. Written by the simulator in e3-run; never modified after creation.
+
+### Transcript file: `transcripts/<runId>/<caseId>-<variantId>.json`
 
 ```json
 {
   "caseId": "string",
   "variantId": "string",
+  "promptVariantId": "string — which prompt version was loaded",
+  "model": "string — model ID used as bot, e.g. claude-haiku-4-5-20251001",
+  "userSimulatorModel": "string — model used to generate user turns (LLM-plays-user pass)",
+  "simulatorMode": "scripted-user | simulated-user | mixed",
   "runId": "string",
   "turns": [
     {
       "role": "user | assistant",
       "content": "string",
       "tokenCount": "number",
-      "timestampMs": "number"
+      "timestampMs": "number",
+      "source": "scripted | simulated"
     }
   ],
   "totalTokens": "number",
-  "costUSD": "number",
-  "durationMs": "number",
+  "costUSD": "number — actual cost if reported by API; estimated from token counts + price table if not",
+  "costEstimateSource": "api-reported | token-estimate",
+  "latencyMs": "number — total wall-clock time for this transcript, ms",
   "exitState": "flow-selected | abandoned | error | max-turns-reached",
-  "exitEvidence": "string — the exact assistant turn content or error token that triggered this exitState",
+  "exitEvidence": "string — the exact turn content or error token that triggered this exitState",
   "writtenAt": "ISO 8601 datetime",
-  "sha256": "string — hash of this file's content, computed before writing, stored externally in 05-judge.json"
+  "sha256": "string — hash of this file's content; stored externally in transcripts/<runId>/index.json"
 }
 ```
 
-**Hard rules for e4:**
+**`simulatorMode` values:**
+- `"scripted-user"` — all user turns come from the case's `turns` array; no LLM-plays-user pass.
+- `"simulated-user"` — scripted opener only; subsequent user turns generated by LLM-plays-user.
+- `"mixed"` — some turns scripted (adversarial injections), some simulated.
+
+**Hard rules for e3:**
 - `exitState` must be one of the four enumerated values. Any other value is a schema error.
-- `exitEvidence` must be non-empty — the CLI must log what triggered the exit classification.
-- `costUSD` must be non-null. If the endpoint does not report token costs, the CLI estimates from token counts and a stored price table.
+- `exitEvidence` must be non-empty.
+- `model`, `promptVariantId`, `latencyMs`, `costUSD`, and `userSimulatorModel` must all be non-null. These are required for the frontier table in e4.
+- `costUSD` must be non-null. If the endpoint does not report token costs, the CLI estimates from token counts and a stored price table, and sets `costEstimateSource: "token-estimate"`.
 - Transcript files are written atomically (write to `.tmp`, then rename). Partial writes are deleted.
-- The CLI writes the file's SHA-256 to a sidecar index (`transcripts/<runId>/index.json`) immediately after creation. This is the integrity anchor for e5.
+- The CLI writes each file's SHA-256 to `transcripts/<runId>/index.json` immediately after creation. This is the integrity anchor for e4.
 
----
-
-## e5 — 05-judge.json
-
-One judgment per (case × variant). Written by `/e5-judge` (LLM), validated by CLI.
+### Transcript index: `transcripts/<runId>/index.json`
 
 ```json
 {
   "runId": "string",
+  "createdAt": "ISO 8601 datetime",
+  "entries": [
+    {
+      "caseId": "string",
+      "variantId": "string",
+      "file": "string — relative path",
+      "sha256": "string",
+      "latencyMs": "number",
+      "costUSD": "number",
+      "exitState": "string"
+    }
+  ]
+}
+```
+
+---
+
+## e4 — 04-report.json (judgments + frontier table)
+
+One judgment per (case × variant), plus per-variant aggregates and the frontier table. The LLM writes per-case scores and rationale; everything else is computed by the CLI.
+
+```json
+{
+  "runId": "string",
+  "feature": "string",
   "calibrationRef": "string — path to calibration.json used for this run",
+  "calibrationConfidence": "smoke | statistical",
   "rubricRef": "string — path to rubric file",
   "judgments": [
     {
@@ -200,37 +243,23 @@ One judgment per (case × variant). Written by `/e5-judge` (LLM), validated by C
         "CriterionName": "number 1-5"
       },
       "weightedTotal": "number — computed by CLI from scores × weights, not by LLM",
-      "flags": ["verbosity-warning | position-bias-risk | self-preference-risk | refusal | injection-detected"],
+      "latencyMs": "number — copied from transcript by CLI",
+      "costUSD": "number — copied from transcript by CLI",
+      "flags": ["verbosity-warning | position-bias-risk | self-preference-risk | injection-detected | rules-routing-failure"],
       "rationale": "string — LLM's scoring rationale referencing specific transcript turns",
       "passFailVerdict": "pass | fail | marginal",
-      "passFailRationale": "string — reference to expectedBehavior from the case"
+      "passFailRationale": "string — reference to expectedBehavior from the case",
+      "calibrationRunId": "string — the e2 calibration run this judge is anchored to"
     }
-  ]
-}
-```
-
-**Hard rules for e5:**
-- Every case in `cases.json` must have a corresponding judgment. Missing cases block e6-report.
-- `transcriptHash` must match the hash in `transcripts/<runId>/index.json`. Mismatch = pipeline integrity failure; rendering blocked.
-- `weightedTotal` is computed by the CLI after the LLM writes scores. The LLM must not write `weightedTotal` — if it does, the CLI overwrites it. This prevents the LLM from gaming the total by misapplying weights.
-- `passFailVerdict` must reference `expectedBehavior` in `passFailRationale`. A verdict with no grounding in the case's stated expectation is rejected.
-- Adversarial cases where the concierge complied with the injection or off-topic request must be flagged `injection-detected` or equivalent. This is not optional — it is the primary signal for adversarial robustness.
-- The LLM judge must include its calibration run ID in a preamble field before any scores. This is the traceability link back to e3.
-
----
-
-## e6 — 06-report.json
-
-Deterministic aggregation. Written entirely by CLI from `05-judge.json`.
-
-```json
-{
-  "runId": "string",
-  "feature": "string",
+  ],
   "variants": [
     {
       "id": "string",
+      "model": "string",
+      "promptVariantId": "string",
       "avgWeightedScore": "number",
+      "avgLatencyMs": "number",
+      "avgCostUSD": "number",
       "scoresByCategory": {
         "happy-path": "number",
         "edge-case": "number",
@@ -239,15 +268,33 @@ Deterministic aggregation. Written entirely by CLI from `05-judge.json`.
       "scoresByCriterion": {
         "CriterionName": "number"
       },
+      "scoresBySegment": {
+        "beauty": "number",
+        "clinic": "number",
+        "petshop": "number"
+      },
       "passRate": "number — % of cases with passFailVerdict=pass",
       "failureTaxonomy": {
         "PatternLabel": "number — count of cases exhibiting this failure"
       }
     }
   ],
-  "winner": "string variant id | inconclusive",
-  "winnerConfidenceInterval": [0.0, 0.0],
-  "winnerRationale": "string — which cases and criteria drove the decision",
+  "frontierTable": [
+    {
+      "variantId": "string",
+      "qualityScore": "number",
+      "avgLatencyMs": "number",
+      "avgCostUSD": "number",
+      "paretoNote": "string — e.g. 'dominates on quality', 'cheapest', 'fastest', 'dominated'"
+    }
+  ],
+  "winner": {
+    "quality": "string variant id | inconclusive",
+    "cost": "string variant id",
+    "latency": "string variant id",
+    "qualityConfidenceInterval": [0.0, 0.0],
+    "qualityWinnerRationale": "string — which cases and criteria drove the quality decision"
+  },
   "criticalFailures": [
     {
       "caseId": "string",
@@ -261,11 +308,17 @@ Deterministic aggregation. Written entirely by CLI from `05-judge.json`.
 }
 ```
 
-**Hard rules for e6:**
-- `winner` must be `"inconclusive"` if `winnerConfidenceInterval` overlaps zero.
-- `criticalFailures` must list every case where `passFailVerdict=fail` on a criterion weight ≥ 0.20. These are not optional observations — they are the primary output of a failed eval.
+**Hard rules for e4:**
+- Every (case × variant) combination in the case set must have a corresponding judgment. Missing entries block rendering.
+- `transcriptHash` must match the hash in `transcripts/<runId>/index.json`. Mismatch = pipeline integrity failure; rendering blocked.
+- `weightedTotal`, `latencyMs`, and `costUSD` in each judgment are computed by the CLI from transcript data. The LLM must not write these — if it does, the CLI overwrites them.
+- `winner.quality` must be `"inconclusive"` if `qualityConfidenceInterval` overlaps zero.
+- `criticalFailures` must list every case where `passFailVerdict=fail` on any criterion with weight ≥ 0.20.
 - `totalCostUSD` must be computed from transcript `costUSD` fields, not estimated.
-- The rendered DOCX/PDF is generated from this file. Score values in narrative text are referenced as `{{score:variantId:criterion}}` tokens resolved by the renderer. No raw numbers in prose.
+- `calibrationConfidence: "smoke"` requires a header warning in the rendered DOCX: "Calibration: SMOKE TEST (N=5). Upgrade to N≥10 for statistical validity before using these results to make deployment decisions."
+- The judge preamble must include `calibrationRunId` before any scores. This is the traceability link back to e2.
+- Score values in report narrative text are referenced as `{{score:variantId:criterion}}` tokens resolved by the renderer. No raw numbers in prose.
+- Adversarial cases where the concierge complied with injection or off-topic framing must be flagged `injection-detected`. This is not optional — it is the primary signal for adversarial robustness.
 
 ---
 
@@ -276,12 +329,10 @@ Mirrors `core/schema.js`. Each step has a validator function returning an array 
 ```js
 // evalagent/schema.js (to be implemented)
 const validators = {
-  'e1-intake':      (d) => { /* check variants, successCriteria, rubricFile exists */ },
-  'e2-cases':       (d) => { /* check expectedBehavior, category distribution, unique ids */ },
-  'e3-calibration': (d) => { /* check humanScores complete, calibrationPassed set by CLI */ },
-  'e4-transcripts': (index) => { /* check all cases have transcripts, exitState valid */ },
-  'e5-judge':       (d, transcriptIndex) => { /* check hash matches, weightedTotal absent, passFailRationale present */ },
-  'e6-report':      (d) => { /* check winner/CI logic, criticalFailures populated */ },
+  'e1-intake':      (d) => { /* check variants have model+promptVariantId, successCriteria, rubricFile exists, case distribution */ },
+  'e2-calibrate':   (d) => { /* check humanScores complete, confidence set by N, calibrationPassed set by CLI */ },
+  'e3-transcripts': (index) => { /* check all (case × variant) pairs have transcripts; latencyMs, costUSD, model non-null */ },
+  'e4-report':      (d, transcriptIndex) => { /* check hash matches, weightedTotal not from LLM, frontierTable present, winner CI logic */ },
 };
 ```
 
@@ -292,9 +343,16 @@ $ node evalagent/cli.js status
 
 Step         Status     Issues
 e1-intake    ✓ done     —
-e2-cases     ✓ done     —
-e3-calibrate ✗ blocked  Goal Completion criterion: 60% agreement (threshold 75%). Revise anchor for score 3.
-e4-run       — pending  blocked by e3
-e5-judge     — pending  blocked by e3
-e6-report    — pending  blocked by e3
+e2-calibrate ✗ blocked  Goal Completion: 60% within-1 agreement (threshold 75%). Revise anchor for score 3.
+e3-run       — pending  blocked by e2
+e4-judge     — pending  blocked by e2
 ```
+
+---
+
+## Changelog
+
+| Date | Version | Change |
+|---|---|---|
+| 2026-06-12 | 1.0 | Initial schemas — 6-step pipeline |
+| 2026-06-12 | 2.0 | 6→4 step pipeline; e1 merged with cases (added `segment`, `routing` fields); e2 calibration adds `confidence`, `nCases`, `judgeModel`; e3 transcript adds `model`, `promptVariantId`, `latencyMs`, `costEstimateSource`, `userSimulatorModel`, `simulatorMode`, per-turn `source`; e4 merged judge+report, adds `frontierTable`, per-segment scores, split `winner` object; hard rule 8 added for `confidence` |
