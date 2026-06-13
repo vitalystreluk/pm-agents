@@ -204,7 +204,24 @@ The strategy agent's step 1 (s1-research) records VoC signals in `vocSignals` an
 python discovery/cli.py voc-validate --strategy-run botconversa-2026-06-112123
 ```
 
-Output: for each linked claim, whether the discovery data supports, contradicts, or is silent on the claim, with citation count and cluster frequency as evidence. The delta report is a human-readable file (`voc-delta.md`) — the PM uses it to call `node strategy/cli.js confirm <claimId> --value V --source "discovery-run"` on claims the data now supports.
+Output: for each linked claim, a deterministic verdict computed by the CLI, with citation count and cluster frequency as evidence. The delta report is a human-readable file (`voc-delta.md`) — the PM uses it to call `node strategy/cli.js confirm <claimId> --value V --source "discovery-run"` on claims the data now supports.
+
+#### Deterministic verdict scale (v1)
+
+The verdict is computed by the CLI from the data — it is **not** an LLM judgment. Only two automatic verdicts exist in v1:
+
+| Verdict | Condition (all must hold) |
+|---|---|
+| `supported` | (1) a linked insight cluster exists for the claim (`strategyClaimIds` resolves to a cluster in `04-report.json → insights`); AND (2) that cluster's `frequency` ≥ `min_cluster_size` used in the run (the d2 threshold recorded in `02-clusters.json → hdbscanParams.min_cluster_size`); AND (3) the cluster's severity direction matches the claim's direction — for a claim asserting a **pain/problem** the cluster `clusterType` ∈ {`complaint`, `question`, `feature-request`} and `severity ≥ 3`; for a claim asserting a **positive/strength** the cluster `clusterType` = `praise`. |
+| `insufficient-evidence` | Any of the above fails: no linked cluster, cluster `frequency < min_cluster_size`, or severity/type direction does not match the claim. This is the default verdict. |
+
+**Numeric thresholds (explicit, v1):**
+- Linked cluster required: yes (no link → `insufficient-evidence`).
+- Minimum cluster frequency: `frequency ≥ min_cluster_size` (run value from `02-clusters.json`; default 5, auto-lowered to 3 for corpora < 50 rows per §3).
+- Severity direction match for pain claims: `severity ≥ 3` AND `clusterType ∈ {complaint, question, feature-request}`.
+- Severity direction match for positive claims: `clusterType = praise`.
+
+**`contradicts` is not an automatic verdict.** The CLI never emits `contradicts`. When the PM reads `voc-delta.md` and judges that the discovery data actively refutes a claim (e.g., a claim says "users love onboarding" but the only matching cluster is a `complaint` about onboarding at `severity 4`), the PM records a **manual** `contradicts` verdict directly in `voc-delta.md`, with a written justification under the claim's entry. This is a semantic judgment that requires reading the quotes — the CLI surfaces the evidence (cluster type, severity, citations) but does not decide refutation. `voc-delta.md` therefore has a per-claim "PM verdict" line that the human fills in, distinct from the CLI's automatic `supported` / `insufficient-evidence` line.
 
 **Schema contract:** `04-report.json` insight blocks have an optional `strategyClaimIds: ["claim-id-1"]` field. The CLI populates this from a mapping file (`claim-map.json`) that the PM maintains manually. The mapping file is not generated automatically — claim correspondence is a semantic judgment.
 
@@ -306,3 +323,4 @@ Strategy Agent  ──→  Eval Agent  ──→  (deployed product)  ──→ 
 | Date | Version | Change |
 |---|---|---|
 | 2026-06-12 | 1.0 | Initial design — 4-step pipeline; Python CLI; local embeddings; cross-agent loops; privacy modes; honest limitations |
+| 2026-06-13 | 1.1 | §8 Loop 1: voc-validate verdict made deterministic — v1 scale `supported` / `insufficient-evidence` with explicit numeric thresholds; `contradicts` removed from automatic verdicts and moved to a manual PM verdict in `voc-delta.md` |
