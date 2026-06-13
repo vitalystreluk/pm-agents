@@ -10,7 +10,7 @@ Two working agents, one shared spine. Every number carries its source and status
 |---|---|---|
 | [`strategy/`](strategy/) | **shipped** — battle-tested on a real B2B SaaS case | Generates a full product strategy & roadmap (DOCX/PDF) from market inputs; upgrades it with internal data via a Claim Ledger and delta reports |
 | [`evalagent/`](evalagent/) | **shipped** — full run on a pre-implementation feature | Evaluates LLM features: simulated dialogues, LLM-as-a-Judge with a calibration gate, quality×cost×latency frontier across prompt/model variants |
-| [`discovery/`](discovery/) | planned | Raw user feedback → clustered insights on local embeddings, every insight traced to source quotes |
+| [`discovery/`](discovery/) | **shipped** — validated on synthetic corpus | Raw user feedback (CSV) → pain clusters on local embeddings → prioritized report where every insight carries a code-computed frequency, severity, segment, and source-traced quotes. The most deterministic agent: one LLM step of four. |
 
 ---
 
@@ -69,6 +69,18 @@ node evalagent/cli.js render-report        # frontier table, error taxonomy, sco
 
 Designed for **pre-implementation evaluation**: the target feature (an AI onboarding concierge) doesn't exist yet — a two-pass simulator generates the dialogues (LLM-plays-bot vs LLM-plays-user per case script), so prompt candidates are compared *before* engineering investment. The judge is blocked by a calibration gate until agreement with independent labels passes threshold; calibration at N=5 is explicitly labeled a smoke test, with statistical confidence requiring N≥10.
 
+## Discovery agent — 60 seconds
+
+```bash
+pip install -r discovery/requirements.txt
+python discovery/cli.py demo
+python discovery/cli.py status
+python discovery/cli.py voc-validate --strategy-run <run>
+python discovery/cli.py export-eval-cases --min-severity 3
+```
+
+Raw feedback → clusters → prioritized insights, built so that the LLM never reports a number. Pipeline: d1 ingest (CSV normalize, dedup) → d2 embed+cluster (local multilingual sentence-transformers + HDBSCAN, fully offline — feedback never leaves the machine) → d3 label (the one LLM step: names each cluster, picks quotes by row-id; output rejected if it contains any count, every quote must trace to a real source row) → d4 report (frequencies and severities computed by the CLI). Cross-agent loops close the portfolio: voc-validate checks the strategy agent's VoC claims against real clusters with a deterministic verdict (supported / insufficient-evidence; contradicts is always a manual PM call), and export-eval-cases turns complaint clusters into candidate eval cases.
+
 ## Case study
 
 [`docs/case-study/`](docs/case-study/) contains the full battle-run artifacts: the rendered strategy PDF, the three review documents with every finding, and the eval run report with the frontier table. The git history is the changelog of the eval loop: finding → schema rule → re-render → zero recurrence.
@@ -79,6 +91,7 @@ Designed for **pre-implementation evaluation**: the target feature (an AI onboar
 - Eval calibration v1 used cross-model proxy labels, not blind human labels — disclosed in `calibration.json`; the rubric now mandates blind collection (anchoring-bias rule #6).
 - Simulator latency numbers are pipeline fields, not production measurements — cost figures are real arithmetic, latency awaits a live integration.
 - LLM steps run through Claude Code slash commands (subscription-based); an API runner is a deliberate non-goal until autonomous scheduled runs are needed.
+- Discovery is validated on a 42-row synthetic corpus; a real-data run (300–500 reviews) is the next step. Frequencies answer "how common among people who wrote a review," not "among all users" (selection bias).
 
 ## Stack
 
