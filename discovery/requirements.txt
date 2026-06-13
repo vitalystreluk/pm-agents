@@ -1,0 +1,9 @@
+# Discovery Agent — Python dependencies
+# Pinned to the versions actually installed in the dev environment (pip show).
+# numpy is held below 2.0 on purpose: sentence-transformers / hdbscan binary
+# wheels in this environment were built against the numpy 1.x ABI.
+sentence-transformers==5.5.1
+hdbscan==0.8.44
+scikit-learn==1.9.0
+pandas==2.3.1
+numpy<2
