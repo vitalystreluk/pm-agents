@@ -16,3 +16,11 @@ financial/business abbreviations (ARR, MRR, CAC, LTV, NRR, ARPU, GMV). If an
 industry-standard term exists for the metric (e.g. "Containment Rate" for
 resolution-without-human in chatbot/contact-center contexts), prefer it — it makes
 the metric externally benchmarkable.
+
+V3 — collectionHint (drives the /collect-data dialogue): for every claim you create,
+add a short `collectionHint` — where the company would normally find this number
+internally (e.g. "billing/Stripe dashboard → churn last month", "product analytics →
+activation funnel", "finance sheet → blended cost per seat"). Estimate and null-value
+claims especially need it, since those are what /collect-data will ask the user to
+confirm. Keep it ≤160 chars. The field is optional in the schema, but omit it only
+when no sensible source location exists.

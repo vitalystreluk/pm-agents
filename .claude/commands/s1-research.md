@@ -17,3 +17,11 @@ VALUE CONTRACT (hard rule, schema-enforced): every claim must carry an ATOMIC va
 description (≤160 chars) in `statement`. Never bury the number inside the statement
 sentence — a claim cited inline as {{claim:id}} renders its `value`; null renders as
 a gap in the middle of prose.
+
+V3 — collectionHint (drives the /collect-data dialogue): for every claim you create,
+add a short `collectionHint` — where the company would normally find this number
+internally (e.g. "billing/Stripe dashboard → churn last month", "product analytics →
+activation funnel", "finance sheet → blended cost per seat"). Estimate and null-value
+claims especially need it, since those are what /collect-data will ask the user to
+confirm. Keep it ≤160 chars. The field is optional in the schema, but omit it only
+when no sensible source location exists.
