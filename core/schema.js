@@ -31,6 +31,14 @@ function validateClaims(data, path, errors) {
       errors.push(err(`${path}.claims[${i}]`, `statement is ${st.length} chars — must be a short metric description (≤160), not a sentence carrying the number; put the number in "value"`));
     if (c.status === 'public' && (c.value === null || c.value === undefined || c.value === ''))
       errors.push(err(`${path}.claims[${i}]`, `status "public" requires a non-null atomic value — a verified source means a verified number; extract it from the statement into "value"`));
+    // V3: collectionHint is OPTIONAL (back-compat with V1/V2 runs), but if present it
+    // must be a short pointer to where the number lives, not a paragraph.
+    if (c.collectionHint !== undefined && c.collectionHint !== null) {
+      if (typeof c.collectionHint !== 'string')
+        errors.push(err(`${path}.claims[${i}].collectionHint`, 'must be a string'));
+      else if (c.collectionHint.length > 160)
+        errors.push(err(`${path}.claims[${i}].collectionHint`, `is ${c.collectionHint.length} chars — keep it a short "where to find it" pointer (≤160)`));
+    }
   }
 }
 
@@ -161,6 +169,21 @@ const STEP_ORDER = [
   '01-research', '02-framework', '03-roadmap',
   '04-scoring', '05-monetization', '06-review', '07-synthesis',
 ];
+
+// V3: how decision-bearing each step is. Used to rank the data-collection queue
+// by IMPACT — a number a verdict depends on is worth collecting before a
+// descriptive figure. This is a structural proxy for "does this change a
+// conclusion", not a semantic judgement; the one hard signal of "gates the
+// verdict" is 05-monetization.dependsOnClaims, scored on top of this.
+const STEP_DECISION_WEIGHT = {
+  '05-monetization': 5, // gates the monetization verdict
+  '04-scoring': 4,      // gates feature ranking
+  '03-roadmap': 3,      // gates initiative success metrics
+  '02-framework': 2,    // North Star / targets
+  '01-research': 1,     // descriptive context
+  '06-review': 0,       // derivative — adds no collection priority
+  '07-synthesis': 0,    // derivative
+};
 
 // ---- EVAL AGENT VALIDATORS ----
 // Hard rule 8: confidence is set by CLI from N — validator enforces consistency.
@@ -311,4 +334,4 @@ function validateEval(stepKey, data) {
 
 const EVAL_STEP_ORDER = ['e1', 'e2', 'e3', 'e4'];
 
-module.exports = { validate, STEP_ORDER, validateEval, EVAL_STEP_ORDER };
+module.exports = { validate, STEP_ORDER, STEP_DECISION_WEIGHT, validateEval, EVAL_STEP_ORDER };
