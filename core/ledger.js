@@ -40,6 +40,8 @@ class Ledger {
           // same claim referenced by another step → merge usedIn
           const prev = seen.get(c.id);
           prev.usedIn = [...new Set([...prev.usedIn, ...(c.usedIn || []), stepName])];
+          // keep the first non-empty collectionHint we saw
+          if (!prev.collectionHint && c.collectionHint) prev.collectionHint = c.collectionHint;
         } else {
           const claim = {
             id: c.id,
@@ -49,6 +51,7 @@ class Ledger {
             source: c.source || 'estimate',
             status: c.status === 'public' ? 'public' : 'estimate',
             usedIn: [...new Set([...(c.usedIn || []), stepName])],
+            collectionHint: c.collectionHint ?? null, // V3: where this number is usually found
           };
           seen.set(c.id, claim);
           this.claims.push(claim);
