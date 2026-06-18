@@ -58,6 +58,25 @@ node strategy/cli.js confirm churn_m1 --value 4.5 --source "billing export, Jun 
 node strategy/cli.js render                 # the document re-renders from state
 ```
 
+**Version 3 — guided data collection:**
+
+```bash
+node strategy/cli.js collect-plan           # impact-ranked queue of what to collect, + progress
+# then in Claude Code: /collect-data — a dialogue that walks the queue one metric at
+# a time, says why each matters and where to find it, and calls confirm under the hood
+```
+
+`/collect-data` turns the agent from a document generator into a partner for pulling
+a company's *internal* numbers. The split is strict: the LLM runs the conversation and
+suggests where each metric lives; the CLI owns the ordering, the progress count, the
+write, and the contradiction delta (hard rule 8). Order is by **impact** — a number the
+monetization verdict depends on is collected before a descriptive figure — derived from
+each claim's `usedIn` steps, their decision weight, and `dependsOnClaims`. Honest
+boundaries: a matching value re-renders instantly; a contradicting one names the affected
+steps and asks before any re-run (it never re-runs conclusions blindly, and never
+overwrites a hand-edited step silently). V3 automates collection and recompute, not
+product judgement — the final document still wants a human's polish.
+
 ## Eval agent — 60 seconds
 
 ```bash

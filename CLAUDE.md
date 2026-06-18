@@ -21,6 +21,9 @@ Monorepo of three PM agents sharing one spine: **AI conclusions without traceabi
 2. Run /s1-research → /s7-synthesis in order (status tells you the next one).
 3. `node strategy/cli.js render` → DOCX with appendices (rubric, self-review, ledger).
 4. V2: `node strategy/cli.js confirm <claimId> --value V --source "S"` → follow the delta report.
+5. V3: `node strategy/cli.js collect-plan` then `/collect-data` → guided collection. The CLI owns
+   ordering/progress/writes/deltas; the slash command only runs the conversation. Never re-run a step
+   or overwrite a hand-edited step JSON during collection without the user's explicit yes.
 
 ## Context
 Author is a PM (10+ yrs, AI/ML focus), comfortable with code but values minimum code.
