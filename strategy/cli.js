@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const { Ledger } = require('../core/ledger');
-const { validate, STEP_ORDER } = require('../core/schema');
+const { validate, STEP_ORDER, STEP_DECISION_WEIGHT } = require('../core/schema');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'output');
@@ -202,6 +202,117 @@ function cmdRender(args) {
   });
 }
 
+// ---------- V3: guided data collection ----------
+// The DETERMINISTIC half of /collect-data. Selection order, the "why", and the
+// progress count are computed here (hard rule 8: the CLI owns numbers, never the
+// LLM). The slash command reads this, runs the conversation, and calls `confirm`.
+
+const STEP_LABEL = {
+  '05-monetization': 'монетизация',
+  '04-scoring': 'скоринг фич',
+  '03-roadmap': 'роадмап',
+  '02-framework': 'метрики/North Star',
+  '01-research': 'ресёрч',
+};
+
+function dependsSet(run) {
+  // The one hard signal of "this number gates the verdict".
+  const f = stepFile(run, '05-monetization');
+  if (!fs.existsSync(f)) return new Set();
+  try {
+    const d = JSON.parse(fs.readFileSync(f, 'utf8'));
+    return new Set(d.dependsOnClaims || []);
+  } catch {
+    return new Set();
+  }
+}
+
+function stepWeight(claim) {
+  return Math.max(0, ...claim.usedIn.map((s) => STEP_DECISION_WEIGHT[s] ?? 0));
+}
+
+function isNullGap(claim) {
+  return claim.value === null || claim.value === undefined || claim.value === '';
+}
+
+function impactOf(claim, deps) {
+  // verdict gate floats to the top; then step weight; then breadth of use; then
+  // a small bump for true null gaps (they render as [→ Validate] holes today).
+  const gate = deps.has(claim.id) ? 100 : 0;
+  return gate + stepWeight(claim) * 10 + claim.usedIn.length + (isNullGap(claim) ? 0.5 : 0);
+}
+
+function whyOf(claim, deps) {
+  const parts = [];
+  if (deps.has(claim.id)) parts.push('гейтит вердикт монетизации');
+  const named = claim.usedIn
+    .filter((s) => (STEP_DECISION_WEIGHT[s] ?? 0) > 0)
+    .map((s) => STEP_LABEL[s] || s);
+  if (named.length) parts.push('используется в: ' + named.join(', '));
+  if (!parts.length) parts.push('описательный контекст');
+  return parts.join(' · ');
+}
+
+// A claim is "key" if it feeds a decision (framework and above) or gates the verdict.
+function isKey(claim, deps) {
+  return stepWeight(claim) >= 2 || deps.has(claim.id);
+}
+
+function buildCollectionPlan(run) {
+  const ledger = ingestLedger(run);
+  const eff = ledger.effective();
+  const deps = dependsSet(run);
+
+  const keyAll = eff.filter((c) => isKey(c, deps));
+  const collected = keyAll.filter((c) => c.status === 'confirmed' || c.status === 'contradicted');
+
+  const queue = eff
+    .filter((c) => c.status === 'estimate' || c.status === 'public') // unconfirmed only
+    .map((c) => ({
+      id: c.id,
+      statement: c.statement,
+      status: c.status,
+      value: c.value,
+      unit: c.unit || '',
+      key: isKey(c, deps),
+      why: whyOf(c, deps),
+      collectionHint: c.collectionHint || null,
+      impact: impactOf(c, deps),
+    }))
+    .sort((a, b) => b.impact - a.impact);
+
+  return { progress: { collected: collected.length, total: keyAll.length }, queue };
+}
+
+function cmdCollectPlan(args) {
+  const run = resolveRun(args);
+  const plan = buildCollectionPlan(run);
+
+  if ('json' in args) {
+    console.log(JSON.stringify({ run: path.relative(ROOT, run), ...plan }, null, 2));
+    return;
+  }
+
+  console.log(`COLLECT-DATA PLAN — ${path.relative(ROOT, run)}\n`);
+  console.log(`Progress: ${plan.progress.collected} of ${plan.progress.total} key metrics collected\n`);
+  if (!plan.queue.length) {
+    console.log('Nothing left to collect — all claims are confirmed.');
+    return;
+  }
+  console.log('Next up (highest impact first; the agent asks one at a time):');
+  plan.queue.forEach((c, i) => {
+    const tag = c.status === 'public' ? 'PUBLIC' : '→ VALIDATE';
+    const cur = isNullGap(c) ? '(no value yet)' : `${c.value}${c.unit}`;
+    const star = c.key ? ' *key' : '';
+    console.log(`  ${i + 1}. [${tag}] ${c.id} — ${c.statement}${star}`);
+    console.log(`        current: ${cur} (${c.status})`);
+    console.log(`        why: ${c.why}`);
+    console.log(`        where: ${c.collectionHint || '(no hint — add collectionHint in the step)'}`);
+  });
+  console.log('\nConfirm a value with:');
+  console.log('  node strategy/cli.js confirm <id> --value V --source "where it came from"');
+}
+
 function cmdDemo() {
   const fixtures = require('./fixtures');
   const run = path.join(OUT, `demo-${Date.now()}`);
@@ -224,6 +335,7 @@ const cmd = args._[0];
   confirm: cmdConfirm,
   render: cmdRender,
   demo: cmdDemo,
+  'collect-plan': cmdCollectPlan,
 }[cmd] || (() => {
-  console.log('Commands: init | status | claims | confirm | render | demo');
+  console.log('Commands: init | status | claims | confirm | render | collect-plan | demo');
 }))(args);
