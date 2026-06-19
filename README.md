@@ -81,6 +81,23 @@ product judgement — the final document still wants a human's polish.
 
 Each claim carries a `kind`: `metric` (an internal company number — churn, MRR, activation, cost base), `recommendation` (a price or target *we* propose), or `benchmark` (a public, market, or derived fact such as a competitor's listed price). `collect-plan` and `/collect-data` surface **only `kind: metric`** claims — so the agent asks a client for the numbers that live in their systems and never for a recommendation we made or a fact already on a competitor's website. Absent `kind` is treated as `benchmark` (the safe default: an untagged claim is never asked of a client). For an existing run, `node scripts/tag-claims-kind.js output/<run>` tags claims in bulk, then `render`.
 
+**Version 3.2 — author notes (the author's voice, woven into the body):**
+
+```bash
+node strategy/cli.js note add --anchor monetization --kind caveat --body "..."   # capture a note
+# then /author-note in Claude Code for conversational drafting + routing,
+# and /s7-synthesis to weave notes into the document body
+```
+
+Author commentary — context, rationale, risk flags, caveats — used to sit in a block at
+the top of the document because the pipeline had no place for it in the body. Now it lives
+in `notes.json` (an overlay parallel to `confirmations.json`, so a re-run never wipes it),
+each note `anchor`ed to a section or a claim. `/s7-synthesis` weaves each note into the
+prose of its anchored section (rephrasing for flow; the author polishes the result), and
+records `wovenNotes` so `render` flags any note added later that hasn't been woven yet.
+A note never changes a conclusion: critique that does goes through `/s6-review` into state.
+That routing is the author's call — `/author-note` surfaces the fork but never decides it.
+
 ## Eval agent — 60 seconds
 
 ```bash

@@ -27,6 +27,10 @@ Monorepo of three PM agents sharing one spine: **AI conclusions without traceabi
 6. V3.1: every claim has a `kind` — metric|recommendation|benchmark. `/collect-data` collects ONLY
    kind=metric (internal company numbers). Never ask a client for a recommendation we made or a
    public/competitor fact (benchmark). Absent kind ⇒ benchmark (never asked of a client).
+7. V3.2: author notes (notes.json) are the author's VOICE, woven into the body by /s7-synthesis.
+   A note never changes a conclusion. Critique that changes a conclusion goes through /s6-review into
+   state — the author decides which route; never infer it. CLI owns notes.json writes (`note add`);
+   s7 owns weaving and sets wovenNotes; render flags unwoven notes as STALE.
 
 ## Context
 Author is a PM (10+ yrs, AI/ML focus), comfortable with code but values minimum code.
