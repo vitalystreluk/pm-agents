@@ -24,6 +24,9 @@ Monorepo of three PM agents sharing one spine: **AI conclusions without traceabi
 5. V3: `node strategy/cli.js collect-plan` then `/collect-data` → guided collection. The CLI owns
    ordering/progress/writes/deltas; the slash command only runs the conversation. Never re-run a step
    or overwrite a hand-edited step JSON during collection without the user's explicit yes.
+6. V3.1: every claim has a `kind` — metric|recommendation|benchmark. `/collect-data` collects ONLY
+   kind=metric (internal company numbers). Never ask a client for a recommendation we made or a
+   public/competitor fact (benchmark). Absent kind ⇒ benchmark (never asked of a client).
 
 ## Context
 Author is a PM (10+ yrs, AI/ML focus), comfortable with code but values minimum code.

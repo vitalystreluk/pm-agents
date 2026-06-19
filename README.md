@@ -77,6 +77,10 @@ steps and asks before any re-run (it never re-runs conclusions blindly, and neve
 overwrites a hand-edited step silently). V3 automates collection and recompute, not
 product judgement — the final document still wants a human's polish.
 
+**Version 3.1 — claim kind (collect only what a client actually has):**
+
+Each claim carries a `kind`: `metric` (an internal company number — churn, MRR, activation, cost base), `recommendation` (a price or target *we* propose), or `benchmark` (a public, market, or derived fact such as a competitor's listed price). `collect-plan` and `/collect-data` surface **only `kind: metric`** claims — so the agent asks a client for the numbers that live in their systems and never for a recommendation we made or a fact already on a competitor's website. Absent `kind` is treated as `benchmark` (the safe default: an untagged claim is never asked of a client). For an existing run, `node scripts/tag-claims-kind.js output/<run>` tags claims in bulk, then `render`.
+
 ## Eval agent — 60 seconds
 
 ```bash
