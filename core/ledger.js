@@ -42,6 +42,8 @@ class Ledger {
           prev.usedIn = [...new Set([...prev.usedIn, ...(c.usedIn || []), stepName])];
           // keep the first non-empty collectionHint we saw
           if (!prev.collectionHint && c.collectionHint) prev.collectionHint = c.collectionHint;
+          // a more specific kind (metric/recommendation) wins over an absent/benchmark default
+          if (c.kind && (!prev.kind || prev.kind === 'benchmark')) prev.kind = c.kind;
         } else {
           const claim = {
             id: c.id,
@@ -52,6 +54,7 @@ class Ledger {
             status: c.status === 'public' ? 'public' : 'estimate',
             usedIn: [...new Set([...(c.usedIn || []), stepName])],
             collectionHint: c.collectionHint ?? null, // V3: where this number is usually found
+            kind: c.kind ?? null, // V3.1: metric|recommendation|benchmark (null → treated as benchmark)
           };
           seen.set(c.id, claim);
           this.claims.push(claim);
