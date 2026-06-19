@@ -253,9 +253,10 @@ function whyOf(claim, deps) {
   return parts.join(' · ');
 }
 
-// A claim is "key" if it feeds a decision (framework and above) or gates the verdict.
-function isKey(claim, deps) {
-  return stepWeight(claim) >= 2 || deps.has(claim.id);
+// V3.1: a claim is collectable from a client only if it is an internal metric.
+// Absent kind is treated as benchmark (safe default — never asked of a client).
+function isCollectable(claim) {
+  return (claim.kind || 'benchmark') === 'metric';
 }
 
 function buildCollectionPlan(run) {
@@ -263,25 +264,29 @@ function buildCollectionPlan(run) {
   const eff = ledger.effective();
   const deps = dependsSet(run);
 
-  const keyAll = eff.filter((c) => isKey(c, deps));
-  const collected = keyAll.filter((c) => c.status === 'confirmed' || c.status === 'contradicted');
+  // Denominator and queue are now defined by kind=metric, not by structural weight.
+  // Recommendations (our proposals/targets) and benchmarks (public/derived facts) are
+  // never surfaced as questions to a client, so they leave the collection queue entirely.
+  const metrics = eff.filter(isCollectable);
+  const collected = metrics.filter((c) => c.status === 'confirmed' || c.status === 'contradicted');
 
-  const queue = eff
-    .filter((c) => c.status === 'estimate' || c.status === 'public') // unconfirmed only
+  const queue = metrics
+    .filter((c) => c.status === 'estimate' || c.status === 'public') // unconfirmed metrics only
     .map((c) => ({
       id: c.id,
       statement: c.statement,
       status: c.status,
       value: c.value,
       unit: c.unit || '',
-      key: isKey(c, deps),
+      kind: c.kind || 'benchmark',
+      gatesVerdict: deps.has(c.id),
       why: whyOf(c, deps),
       collectionHint: c.collectionHint || null,
       impact: impactOf(c, deps),
     }))
     .sort((a, b) => b.impact - a.impact);
 
-  return { progress: { collected: collected.length, total: keyAll.length }, queue };
+  return { progress: { collected: collected.length, total: metrics.length }, queue };
 }
 
 function cmdCollectPlan(args) {
@@ -294,17 +299,16 @@ function cmdCollectPlan(args) {
   }
 
   console.log(`COLLECT-DATA PLAN — ${path.relative(ROOT, run)}\n`);
-  console.log(`Progress: ${plan.progress.collected} of ${plan.progress.total} key metrics collected\n`);
+  console.log(`Progress: ${plan.progress.collected} of ${plan.progress.total} internal metrics collected\n`);
   if (!plan.queue.length) {
-    console.log('Nothing left to collect — all claims are confirmed.');
+    console.log('Nothing left to collect — every internal metric is confirmed.');
     return;
   }
-  console.log('Next up (highest impact first; the agent asks one at a time):');
+  console.log('Metrics to collect from the client (highest impact first; the agent asks one at a time):');
   plan.queue.forEach((c, i) => {
-    const tag = c.status === 'public' ? 'PUBLIC' : '→ VALIDATE';
     const cur = isNullGap(c) ? '(no value yet)' : `${c.value}${c.unit}`;
-    const star = c.key ? ' *key' : '';
-    console.log(`  ${i + 1}. [${tag}] ${c.id} — ${c.statement}${star}`);
+    const gate = c.gatesVerdict ? ' *gates verdict' : '';
+    console.log(`  ${i + 1}. ${c.id} — ${c.statement}${gate}`);
     console.log(`        current: ${cur} (${c.status})`);
     console.log(`        why: ${c.why}`);
     console.log(`        where: ${c.collectionHint || '(no hint — add collectionHint in the step)'}`);
