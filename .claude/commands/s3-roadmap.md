@@ -16,3 +16,18 @@ activation funnel", "finance sheet → blended cost per seat"). Estimate and nul
 claims especially need it, since those are what /collect-data will ask the user to
 confirm. Keep it ≤160 chars. The field is optional in the schema, but omit it only
 when no sensible source location exists.
+
+V3.1 — kind (gates what /collect-data may ASK a client): tag every claim with `kind`.
+  - "metric"         — an internal company number (churn, MRR, activation, cost base, usage,
+                       account mix). These are what the agent collects in dialogue. Give these
+                       a collectionHint pointing at where the number lives in the company.
+  - "recommendation" — your own proposal or target (a price you recommend, a target rate you
+                       set). NOT a fact you ask the client for — confirmed by their agreement or
+                       your revision.
+  - "benchmark"      — a public, market, or derived fact (competitor pricing from their site,
+                       industry rates, a figure computed from public inputs). Confirmed by
+                       research, never asked of a client.
+Decision rule: "is this a number that lives in THIS company's systems?" → metric. "Did I
+propose it?" → recommendation. "Is it public or derived?" → benchmark. A current competitor
+price from their website is benchmark, not metric — do not ask a client for it. If unsure, omit
+kind; downstream treats absent kind as benchmark (the safe default — never asked of a client).
