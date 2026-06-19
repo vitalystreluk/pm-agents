@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { Ledger } = require('../core/ledger');
 const { validate, STEP_ORDER, STEP_DECISION_WEIGHT } = require('../core/schema');
+const notesLib = require('../core/notes');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'output');
@@ -43,7 +44,10 @@ function latestRun() {
 
 function resolveRun(args) {
   // ignore junk positionals (e.g. a pasted "#comment" passed through npm run)
-  const named = (args._[1] && /^[a-z0-9][\w-]*$/i.test(args._[1])) ? args._[1] : null;
+  // --run wins (used by subcommands like `note add` where _[1] is the verb, not the run)
+  const named = (typeof args.run === 'string' && args.run)
+    ? args.run
+    : ((args._[1] && /^[a-z0-9][\w-]*$/i.test(args._[1])) ? args._[1] : null);
   const dir = named ? path.join(OUT, named) : latestRun();
   if (named && !fs.existsSync(dir)) {
     console.error(`Run "${named}" not found in output/. Available: ${fs.existsSync(OUT) ? fs.readdirSync(OUT).filter(d => fs.statSync(path.join(OUT, d)).isDirectory()).join(', ') || '(none)' : '(none)'}`);
@@ -317,6 +321,67 @@ function cmdCollectPlan(args) {
   console.log('  node strategy/cli.js confirm <id> --value V --source "where it came from"');
 }
 
+// ---------- V3.2: author notes ----------
+// Notes are the author's voice layered on the strategy. The CLI owns the write
+// (notes.json); /s7-synthesis weaves them into the body and records wovenNotes.
+
+// Which notes.json entries have NOT yet been woven by the last s7 run.
+function notesStaleness(run) {
+  const notes = notesLib.load(run);
+  if (!notes.length) return { notes, unwoven: [] };
+  let woven = [];
+  const s7 = stepFile(run, '07-synthesis');
+  if (fs.existsSync(s7)) {
+    try { woven = JSON.parse(fs.readFileSync(s7, 'utf8')).wovenNotes || []; } catch { woven = []; }
+  }
+  const wovenSet = new Set(woven);
+  const unwoven = notes.filter((n) => !wovenSet.has(n.id));
+  return { notes, unwoven };
+}
+
+function cmdNote(args) {
+  const sub = args._[1];
+  const run = resolveRun(args);
+
+  if (sub === 'list' || !sub) {
+    const { notes, unwoven } = notesStaleness(run);
+    if (!notes.length) { console.log('No author notes yet. Add one with: note add --anchor <section|claim> --body "..."'); return; }
+    const unwovenSet = new Set(unwoven.map((n) => n.id));
+    console.log(`Author notes (${notes.length}) — ${path.relative(ROOT, run)}\n`);
+    notes.forEach((n) => {
+      const flag = unwovenSet.has(n.id) ? ' [NOT YET WOVEN — re-run /s7-synthesis]' : '';
+      console.log(`  ${n.id} @${n.anchor}${n.kind ? ' (' + n.kind + ')' : ''}${flag}`);
+      console.log(`     ${n.body}`);
+    });
+    return;
+  }
+
+  if (sub === 'add') {
+    if (!args.anchor || !args.body) {
+      console.error('Usage: note add --anchor <section|claim> [--kind context|rationale|risk|caveat] --body "..." [--run <run>]');
+      process.exit(1);
+    }
+    // Soft anchor check: warn if it's neither a known section nor a declared claim.
+    const claimIds = new Set(ingestLedger(run).effective().map((c) => c.id));
+    if (!notesLib.ANCHOR_SECTIONS.includes(args.anchor) && !claimIds.has(args.anchor)) {
+      console.log(`  ⚠ anchor "${args.anchor}" is neither a known section (${notesLib.ANCHOR_SECTIONS.join(', ')}) nor a claim id — saving anyway; s7 will place it as best it can.`);
+    }
+    const note = notesLib.add(run, { anchor: args.anchor, kind: args.kind || null, body: args.body });
+    console.log(`Added ${note.id} @${note.anchor}${note.kind ? ' (' + note.kind + ')' : ''}. Re-run /s7-synthesis to weave it into the body.`);
+    return;
+  }
+
+  if (sub === 'remove') {
+    if (!args.id) { console.error('Usage: note remove --id <id> [--run <run>]'); process.exit(1); }
+    const removed = notesLib.remove(run, args.id);
+    console.log(removed ? `Removed ${removed.id} @${removed.anchor}. Re-run /s7-synthesis.` : `No note with id "${args.id}".`);
+    return;
+  }
+
+  console.error('note subcommands: list | add | remove');
+  process.exit(1);
+}
+
 function cmdDemo() {
   const fixtures = require('./fixtures');
   const run = path.join(OUT, `demo-${Date.now()}`);
@@ -340,6 +405,7 @@ const cmd = args._[0];
   render: cmdRender,
   demo: cmdDemo,
   'collect-plan': cmdCollectPlan,
+  note: cmdNote,
 }[cmd] || (() => {
-  console.log('Commands: init | status | claims | confirm | render | collect-plan | demo');
+  console.log('Commands: init | status | claims | confirm | render | collect-plan | note | demo');
 }))(args);
