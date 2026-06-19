@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const { Ledger } = require('../core/ledger');
-const { validate, STEP_ORDER, STEP_DECISION_WEIGHT } = require('../core/schema');
+const { validate, validateNotes, STEP_ORDER, STEP_DECISION_WEIGHT } = require('../core/schema');
 const notesLib = require('../core/notes');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -197,12 +197,23 @@ function cmdRender(args) {
       process.exit(1);
     }
   }
+  // V3.2: a malformed notes.json should block render, not silently render without voice.
+  const noteErrors = validateNotes(notesLib.load(run));
+  if (noteErrors.length) {
+    console.error(`Cannot render — notes.json has errors:\n  ${noteErrors.join('\n  ')}`);
+    process.exit(1);
+  }
   const ledger = ingestLedger(run);
   const { render } = require('./render-docx');
   render(run, ledger).then((outFile) => {
     console.log(`Rendered: ${path.relative(ROOT, outFile)}`);
     const unc = ledger.unconfirmed().length;
     if (unc) console.log(`Note: ${unc} claims remain unconfirmed — they render as [→ Validate] markers and fill the data-request appendix.`);
+    // V3.2: warn if author notes were added but s7 hasn't woven them into the body yet.
+    const { unwoven } = notesStaleness(run);
+    if (unwoven.length) {
+      console.log(`⚠ STALE: ${unwoven.length} author note(s) not yet woven into the body (${unwoven.map((n) => n.id).join(', ')}). Re-run /s7-synthesis, then render again.`);
+    }
   });
 }
 
