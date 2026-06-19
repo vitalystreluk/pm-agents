@@ -17,3 +17,24 @@ percentages, not just digits. If a number has a claim — use the token; if it
 doesn't — create the claim in the relevant step first or drop the number. Counts of
 the document's own elements ("nine metrics", "four unknowns") must be computed from
 the current state JSONs at write time, never recalled from earlier drafts.
+
+AUTHOR NOTES — weave the author's voice into the body (V3.2):
+Read output/<run>/notes.json (it may be absent — then skip this entirely). Each note is
+{ id, anchor, kind, body }: the author's own commentary — context, rationale, a risk
+flag, a caveat — that belongs IN the body, not in a preface block.
+- Placement is set by `anchor`: a section slug (tldr | market | customer | north-star |
+  roadmap | monetization | what-needs-true) → weave into that section; a claim id (e.g.
+  r01) → weave into whichever section discusses that claim.
+- Weave, don't append: integrate each note as a distinct authorial thread inside the
+  section's prose so it reads as part of the argument, not a footnote. You MAY rephrase
+  the author's `body` for flow — the author reviews and adjusts after. Keep the author's
+  point intact; do not soften or invert it. `kind` sets the framing (risk → flag the
+  exposure; rationale → explain the choice; caveat → qualify; context → situate).
+- Do NOT let notes bloat a section or bury its conclusion. A note is a thread woven in,
+  not a new subsection.
+- A note never changes a CONCLUSION. If a note's content actually contradicts a step's
+  finding, that is a routing error by the author (it should have gone through /s6-review),
+  not a license for you to rewrite the verdict. Weave it as the author's stated view and
+  leave the conclusion to the steps.
+- After writing 07-synthesis.json, set its `wovenNotes` field to the list of note ids you
+  incorporated. This lets `render` detect notes added later that haven't been woven yet.
