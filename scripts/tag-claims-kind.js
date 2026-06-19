@@ -22,15 +22,19 @@ const KIND = {
   f01: 'metric', f02: 'metric', f03: 'metric', f04: 'metric', f05: 'metric',
   f06: 'metric', f07: 'metric', f08: 'metric', f09: 'metric', f10: 'metric',
   f11: 'metric', r01: 'metric', s01: 'metric', m01: 'metric', m05: 'metric',
-  // --- recommendation (6): our proposals/targets, not asked of the client ---
+  // --- recommendation (7): our proposals/targets, not asked of the client ---
+  // m02/m03/m04 are the recommended 3-tier prices. BotConversa's live site shows a
+  // different structure (Beginner R$189, Pro R$199) — there is no R$129 "Starter" tier,
+  // so m02 is OUR proposal, not a benchmark of their current price.
+  m02: 'recommendation',
   m03: 'recommendation', m04: 'recommendation',
   r02: 'recommendation', r03: 'recommendation', r04: 'recommendation', r06: 'recommendation',
-  // --- benchmark (23): public/market/derived facts, confirmed by research ---
+  // --- benchmark (22): public/market/derived facts, confirmed by research ---
   c01: 'benchmark', c01b: 'benchmark', c02: 'benchmark', c03: 'benchmark', c04: 'benchmark',
   c05: 'benchmark', c06: 'benchmark', c07: 'benchmark', c08: 'benchmark', c09: 'benchmark',
   c10: 'benchmark', c11: 'benchmark', c12: 'benchmark', c13: 'benchmark', c14: 'benchmark',
   c15: 'benchmark', c16: 'benchmark', c17_noshowmath: 'benchmark', c18: 'benchmark', c19: 'benchmark',
-  r05: 'benchmark', m02: 'benchmark', m06: 'benchmark',
+  r05: 'benchmark', m06: 'benchmark',
 };
 
 const HINT = {
