@@ -27,8 +27,8 @@ const fixtures = {
       { signal: 'Platform instability is the dominant complaint theme', source: 'Reclame Aqui Oct 2025 - Mar 2026' },
     ],
     claims: [
-      { id: 'br_chatbot_trust', statement: 'Share of BR consumers reporting good chatbot experience', value: 20, unit: '%', source: 'PROCON-SP 2024', status: 'public', collectionHint: 'public benchmark — re-check PROCON-SP / Reclame Aqui annual report', usedIn: [] },
-      { id: 'complaints_6mo', statement: 'Reclame Aqui complaints over 6 months', value: 79, unit: '', source: 'Reclame Aqui', status: 'public', collectionHint: 'Reclame Aqui company page → complaints, last 6 months', usedIn: [] },
+      { id: 'br_chatbot_trust', statement: 'Share of BR consumers reporting good chatbot experience', value: 20, unit: '%', source: 'PROCON-SP 2024', status: 'public', collectionHint: 'public benchmark — re-check PROCON-SP / Reclame Aqui annual report', usedIn: [], kind: 'benchmark' },
+      { id: 'complaints_6mo', statement: 'Reclame Aqui complaints over 6 months', value: 79, unit: '', source: 'Reclame Aqui', status: 'public', collectionHint: 'Reclame Aqui company page → complaints, last 6 months', usedIn: [], kind: 'benchmark' },
     ],
   },
 
@@ -45,8 +45,8 @@ const fixtures = {
     },
     firstDashboard: ['Paying accounts by plan', 'TTFV', 'Activation Rate', 'Active bots', 'Total SBI 7d', 'MRR + churn'],
     claims: [
-      { id: 'churn_m1', statement: 'Month-1 churn rate of new paying clients', value: 40, unit: '%', source: 'illustrative example for demo purposes', status: 'estimate', collectionHint: 'billing/Stripe dashboard → month-1 cancellations of new paying clients', usedIn: [] },
-      { id: 'ttfv_baseline', statement: 'Time to first value (signup → first SBI)', value: null, unit: ' days', source: 'estimate', status: 'estimate', collectionHint: 'product analytics → median signup → first SBI (instrument if missing)', usedIn: [] },
+      { id: 'churn_m1', statement: 'Month-1 churn rate of new paying clients', value: 40, unit: '%', source: 'illustrative example for demo purposes', status: 'estimate', collectionHint: 'billing/Stripe dashboard → month-1 cancellations of new paying clients', usedIn: [], kind: 'metric' },
+      { id: 'ttfv_baseline', statement: 'Time to first value (signup → first SBI)', value: null, unit: ' days', source: 'estimate', status: 'estimate', collectionHint: 'product analytics → median signup → first SBI (instrument if missing)', usedIn: [], kind: 'metric' },
     ],
   },
 
@@ -75,7 +75,7 @@ const fixtures = {
       },
     ],
     claims: [
-      { id: 'ig_base_share', statement: 'Share of current base running Instagram profiles', value: 80, unit: '%', source: 'estimate', status: 'estimate', collectionHint: 'CRM/onboarding survey → % of accounts running Instagram profiles', usedIn: [] },
+      { id: 'ig_base_share', statement: 'Share of current base running Instagram profiles', value: 80, unit: '%', source: 'estimate', status: 'estimate', collectionHint: 'CRM/onboarding survey → % of accounts running Instagram profiles', usedIn: [], kind: 'metric' },
     ],
   },
 
@@ -110,7 +110,7 @@ const fixtures = {
     ],
     breakEven: '51 SBIs/month at R$97 base + R$2/SBI vs fixed R$199. If median is below this ({{claim:avg_sbi_month}}), hybrid is a structural ARPU cut for the migrating base.',
     claims: [
-      { id: 'avg_sbi_month', statement: 'Median SBI per active paying account per month', value: null, unit: '', source: 'estimate — requires 30-day instrumented measurement', status: 'estimate', collectionHint: 'product analytics → median SBI per active paying account / month', usedIn: [] },
+      { id: 'avg_sbi_month', statement: 'Median SBI per active paying account per month', value: null, unit: '', source: 'estimate — requires 30-day instrumented measurement', status: 'estimate', collectionHint: 'product analytics → median SBI per active paying account / month', usedIn: [], kind: 'metric' },
     ],
   },
 
