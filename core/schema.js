@@ -32,13 +32,23 @@ function validateClaims(data, path, errors) {
     if (c.status === 'public' && (c.value === null || c.value === undefined || c.value === ''))
       errors.push(err(`${path}.claims[${i}]`, `status "public" requires a non-null atomic value — a verified source means a verified number; extract it from the statement into "value"`));
     // V3: collectionHint is OPTIONAL (back-compat with V1/V2 runs), but if present it
-    // must be a short pointer to where the number lives, not a paragraph.
+    // must be a short pointer to where the number lives, not a paragraph. A real metric
+    // hint may carry a formula and a public cross-check anchor, so the cap is generous
+    // but still bounded — it is a pointer, not prose.
     if (c.collectionHint !== undefined && c.collectionHint !== null) {
       if (typeof c.collectionHint !== 'string')
         errors.push(err(`${path}.claims[${i}].collectionHint`, 'must be a string'));
-      else if (c.collectionHint.length > 160)
-        errors.push(err(`${path}.claims[${i}].collectionHint`, `is ${c.collectionHint.length} chars — keep it a short "where to find it" pointer (≤160)`));
+      else if (c.collectionHint.length > 220)
+        errors.push(err(`${path}.claims[${i}].collectionHint`, `is ${c.collectionHint.length} chars — keep it a "where to find it" pointer (≤220), not prose`));
     }
+    // V3.1: kind separates what the data-collection dialogue may ASK a client for.
+    // OPTIONAL and back-compat; absence is treated as "benchmark" downstream (the safe
+    // default — an untagged claim is never surfaced as a question to a client).
+    //   metric         — an internal company number the agent should collect in dialogue
+    //   recommendation — our proposal/target; confirmed by client agreement or our revision
+    //   benchmark      — public/market/derived fact; confirmed by research, never asked of a client
+    if (c.kind !== undefined && c.kind !== null && !['metric', 'recommendation', 'benchmark'].includes(c.kind))
+      errors.push(err(`${path}.claims[${i}].kind`, `must be one of metric|recommendation|benchmark (got "${c.kind}")`));
   }
 }
 
