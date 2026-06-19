@@ -165,9 +165,38 @@ const validators = {
     });
     // Numbers discipline: synthesis text references claims as {{claim:id}} tokens,
     // resolved by the renderer from the ledger. Raw invented numbers are the enemy.
+    // V3.2: wovenNotes (optional) records which author-note ids s7 incorporated, so
+    // render can detect notes.json entries that haven't been woven yet (staleness).
+    if (d.wovenNotes !== undefined && !Array.isArray(d.wovenNotes))
+      e.push(err('07.wovenNotes', 'must be an array of note ids'));
     return e;
   },
 };
+
+// V3.2: validate the author-note overlay (notes.json). Anchor/body are required;
+// kind is an optional voice tag. Anchor validity (a real section or claim) is checked
+// at weave/render time with the run in hand, not here — schema stays context-free.
+const NOTE_KINDS = ['context', 'rationale', 'risk', 'caveat'];
+function validateNotes(notes) {
+  const e = [];
+  if (!Array.isArray(notes)) return ['notes.json: must be an array'];
+  const seen = new Set();
+  notes.forEach((n, i) => {
+    const p = `notes[${i}]`;
+    req(n, 'id', 'string', p, e);
+    if (n.id && seen.has(n.id)) e.push(err(`${p}.id`, `duplicate id "${n.id}"`));
+    if (n.id) seen.add(n.id);
+    const a = req(n, 'anchor', 'string', p, e);
+    if (a !== undefined && typeof a === 'string' && a.trim() === '')
+      e.push(err(`${p}.anchor`, 'must be a non-empty section slug or claim id'));
+    const b = req(n, 'body', 'string', p, e);
+    if (b !== undefined && typeof b === 'string' && b.trim() === '')
+      e.push(err(`${p}.body`, 'must be non-empty'));
+    if (n.kind !== undefined && n.kind !== null && !NOTE_KINDS.includes(n.kind))
+      e.push(err(`${p}.kind`, `must be one of ${NOTE_KINDS.join('|')} (got "${n.kind}")`));
+  });
+  return e;
+}
 
 function validate(stepName, data) {
   const v = validators[stepName];
@@ -344,4 +373,4 @@ function validateEval(stepKey, data) {
 
 const EVAL_STEP_ORDER = ['e1', 'e2', 'e3', 'e4'];
 
-module.exports = { validate, STEP_ORDER, STEP_DECISION_WEIGHT, validateEval, EVAL_STEP_ORDER };
+module.exports = { validate, validateNotes, STEP_ORDER, STEP_DECISION_WEIGHT, validateEval, EVAL_STEP_ORDER };
