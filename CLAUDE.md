@@ -31,6 +31,9 @@ Monorepo of three PM agents sharing one spine: **AI conclusions without traceabi
    A note never changes a conclusion. Critique that changes a conclusion goes through /s6-review into
    state — the author decides which route; never infer it. CLI owns notes.json writes (`note add`);
    s7 owns weaving and sets wovenNotes; render flags unwoven notes as STALE.
+8. V3.3: a note may carry facts (`note add --claim "id | statement | value | unit | source | kind"`,
+   repeatable). They become ledger claims at ingest with provenance note:<id> — tokenized, never
+   written into a step. An author-introduced fact lives in the author layer; steps stay untouched.
 
 ## Context
 Author is a PM (10+ yrs, AI/ML focus), comfortable with code but values minimum code.

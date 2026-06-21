@@ -98,6 +98,8 @@ records `wovenNotes` so `render` flags any note added later that hasn't been wov
 A note never changes a conclusion: critique that does goes through `/s6-review` into state.
 That routing is the author's call — `/author-note` surfaces the fork but never decides it.
 
+A note may also carry **facts** it rests on (e.g. a competitor's live price): `note add … --claim "m07 | Current live Beginner tier | 189 | BRL/month | <source> | benchmark"` (repeatable). Note-borne facts become real ledger claims at ingest with provenance `note:<id>` — tokenized, shown in the appendix as author-introduced, never written into a step's output. This removes the manual "should I edit step 5?" detour: an author-introduced fact lives in the author layer, not in a step.
+
 ## Eval agent — 60 seconds
 
 ```bash
