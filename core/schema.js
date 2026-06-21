@@ -194,6 +194,12 @@ function validateNotes(notes) {
       e.push(err(`${p}.body`, 'must be non-empty'));
     if (n.kind !== undefined && n.kind !== null && !NOTE_KINDS.includes(n.kind))
       e.push(err(`${p}.kind`, `must be one of ${NOTE_KINDS.join('|')} (got "${n.kind}")`));
+    // V3.3: a note may carry facts (the numbers its point rests on). Validate them with
+    // the same contract as step claims — they become real ledger claims at ingest.
+    if (n.claims !== undefined) {
+      if (!Array.isArray(n.claims)) e.push(err(`${p}.claims`, 'must be an array'));
+      else validateClaims({ claims: n.claims }, p, e);
+    }
   });
   return e;
 }
