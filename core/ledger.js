@@ -30,37 +30,53 @@ class Ledger {
   ingest(stepFiles) {
     this.claims = [];
     const seen = new Map();
+    // absorb one declared claim under a provenance tag (a step name, or "note:<id>").
+    const absorb = (c, provenance) => {
+      if (!c.id || !c.statement) return;
+      if (seen.has(c.id)) {
+        const prev = seen.get(c.id);
+        prev.usedIn = [...new Set([...prev.usedIn, ...(c.usedIn || []), provenance])];
+        if (!prev.collectionHint && c.collectionHint) prev.collectionHint = c.collectionHint;
+        if (c.kind && (!prev.kind || prev.kind === 'benchmark')) prev.kind = c.kind;
+      } else {
+        const claim = {
+          id: c.id,
+          statement: c.statement,
+          value: c.value ?? null,
+          unit: c.unit ?? null,
+          source: c.source || 'estimate',
+          status: c.status === 'public' ? 'public' : 'estimate',
+          usedIn: [...new Set([...(c.usedIn || []), provenance])],
+          collectionHint: c.collectionHint ?? null, // V3
+          kind: c.kind ?? null, // V3.1
+        };
+        seen.set(c.id, claim);
+        this.claims.push(claim);
+      }
+    };
+
     for (const file of stepFiles) {
       if (!fs.existsSync(file)) continue;
       const data = JSON.parse(fs.readFileSync(file, 'utf8'));
       const stepName = path.basename(file, '.json');
-      for (const c of data.claims || []) {
-        if (!c.id || !c.statement) continue;
-        if (seen.has(c.id)) {
-          // same claim referenced by another step → merge usedIn
-          const prev = seen.get(c.id);
-          prev.usedIn = [...new Set([...prev.usedIn, ...(c.usedIn || []), stepName])];
-          // keep the first non-empty collectionHint we saw
-          if (!prev.collectionHint && c.collectionHint) prev.collectionHint = c.collectionHint;
-          // a more specific kind (metric/recommendation) wins over an absent/benchmark default
-          if (c.kind && (!prev.kind || prev.kind === 'benchmark')) prev.kind = c.kind;
-        } else {
-          const claim = {
-            id: c.id,
-            statement: c.statement,
-            value: c.value ?? null,
-            unit: c.unit ?? null,
-            source: c.source || 'estimate',
-            status: c.status === 'public' ? 'public' : 'estimate',
-            usedIn: [...new Set([...(c.usedIn || []), stepName])],
-            collectionHint: c.collectionHint ?? null, // V3: where this number is usually found
-            kind: c.kind ?? null, // V3.1: metric|recommendation|benchmark (null → treated as benchmark)
-          };
-          seen.set(c.id, claim);
-          this.claims.push(claim);
-        }
-      }
+      for (const c of data.claims || []) absorb(c, stepName);
     }
+
+    // V3.3: author notes may carry facts. They become real ledger claims, provenance
+    // "note:<id>" — visible in the appendix as author-introduced, not a step's output.
+    // Steps are never modified to hold them.
+    const notesFile = path.join(this.runDir, 'notes.json');
+    if (fs.existsSync(notesFile)) {
+      try {
+        const notes = JSON.parse(fs.readFileSync(notesFile, 'utf8'));
+        if (Array.isArray(notes)) {
+          for (const n of notes) {
+            for (const c of n.claims || []) absorb(c, `note:${n.id}`);
+          }
+        }
+      } catch { /* malformed notes.json is caught by the render gate, not here */ }
+    }
+
     fs.writeFileSync(path.join(this.runDir, 'claims.json'), JSON.stringify(this.claims, null, 2));
     return this.claims;
   }
