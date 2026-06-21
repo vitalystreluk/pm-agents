@@ -363,13 +363,32 @@ function cmdNote(args) {
       const flag = unwovenSet.has(n.id) ? ' [NOT YET WOVEN — re-run /s7-synthesis]' : '';
       console.log(`  ${n.id} @${n.anchor}${n.kind ? ' (' + n.kind + ')' : ''}${flag}`);
       console.log(`     ${n.body}`);
+      for (const c of n.claims || []) {
+        console.log(`     · fact ${c.id} = ${c.value}${c.unit ? ' ' + c.unit : ''} (${c.status}/${c.kind}) — ${c.source}`);
+      }
     });
     return;
   }
 
   if (sub === 'add') {
     if (!args.anchor || !args.body) {
-      console.error('Usage: note add --anchor <section|claim> [--kind context|rationale|risk|caveat] --body "..." [--run <run>]');
+      console.error('Usage: note add --anchor <section|claim> [--kind context|rationale|risk|caveat] --body "..." [--claim "id | statement | value | unit | source | kind"]... [--run <run>]');
+      process.exit(1);
+    }
+    // --claim is repeatable; parseArgs keeps only the last, so collect from raw argv.
+    const rawArgv = process.argv.slice(2);
+    const claimSpecs = rawArgv.filter((a, i) => rawArgv[i - 1] === '--claim');
+    let claims = [];
+    try {
+      claims = claimSpecs.map((s) => notesLib.parseClaimSpec(s));
+    } catch (e) {
+      console.error(`Bad --claim: ${e.message}`);
+      process.exit(1);
+    }
+    // Validate the note (incl. its claims) before writing — same contract as steps.
+    const shapeErrors = validateNotes([{ id: 'tmp', anchor: args.anchor, kind: args.kind || null, body: args.body, ...(claims.length ? { claims } : {}) }]);
+    if (shapeErrors.length) {
+      console.error(`Cannot add note:\n  ${shapeErrors.join('\n  ')}`);
       process.exit(1);
     }
     // Soft anchor check: warn if it's neither a known section nor a declared claim.
@@ -377,8 +396,9 @@ function cmdNote(args) {
     if (!notesLib.ANCHOR_SECTIONS.includes(args.anchor) && !claimIds.has(args.anchor)) {
       console.log(`  ⚠ anchor "${args.anchor}" is neither a known section (${notesLib.ANCHOR_SECTIONS.join(', ')}) nor a claim id — saving anyway; s7 will place it as best it can.`);
     }
-    const note = notesLib.add(run, { anchor: args.anchor, kind: args.kind || null, body: args.body });
-    console.log(`Added ${note.id} @${note.anchor}${note.kind ? ' (' + note.kind + ')' : ''}. Re-run /s7-synthesis to weave it into the body.`);
+    const note = notesLib.add(run, { anchor: args.anchor, kind: args.kind || null, body: args.body, claims });
+    const factNote = claims.length ? ` + ${claims.length} fact claim(s): ${claims.map((c) => c.id).join(', ')}` : '';
+    console.log(`Added ${note.id} @${note.anchor}${note.kind ? ' (' + note.kind + ')' : ''}${factNote}. Re-run /s7-synthesis to weave it into the body.`);
     return;
   }
 
