@@ -38,3 +38,17 @@ write a note. Only proceed to write a note for case 2.
 - You never decide that a note is important enough to override a conclusion. That routing
   is the author's call (the fork above).
 - To see or remove notes: `node strategy/cli.js note list` / `note remove --id <id>`.
+
+FACTS INSIDE A NOTE (V3.3): if the author's note rests on a number that isn't already a
+claim (e.g. "their live entry price is R$189"), do NOT route it to a step and do NOT leave
+a raw number in the body. Capture it as a fact ON the note via repeatable --claim:
+  node strategy/cli.js note add --anchor monetization --kind caveat \
+    --body "Their live entry tier is above our proposed Starter — cannibalization is sharper." \
+    --claim "m07 | Current live BotConversa Beginner tier | 189 | BRL/month | <source> | benchmark" \
+    --claim "m08 | Current live BotConversa Pro tier | 199 | BRL/month | <source> | benchmark"
+The fact becomes a real ledger claim (provenance note:<id>); s7 then weaves the body and
+references the numbers as tokens. This removes the old "should I edit step 5?" detour — an
+author-introduced fact lives in the author layer, never in a step's output. Confirm id /
+value / source with the author before writing. Author facts are almost always
+kind=benchmark (a verified external/observed fact), so they never enter the collect-data
+queue.

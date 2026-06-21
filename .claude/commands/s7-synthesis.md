@@ -38,3 +38,10 @@ flag, a caveat — that belongs IN the body, not in a preface block.
   leave the conclusion to the steps.
 - After writing 07-synthesis.json, set its `wovenNotes` field to the list of note ids you
   incorporated. This lets `render` detect notes added later that haven't been woven yet.
+
+NOTE FACTS (V3.3): a note in notes.json may carry its own `claims` (facts the note's
+point rests on, e.g. a competitor's live price). At ingest these are ALREADY real ledger
+claims (provenance "note:<id>") with tokens. So when weaving such a note, reference those
+numbers as {{claim:id}} like any other — they resolve from the ledger. Do NOT add them to
+any step's JSON, and do NOT write the raw number in prose. The author layer holds the fact;
+steps stay untouched.
