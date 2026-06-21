@@ -49,9 +49,25 @@ function nextId(notes) {
   return `n${n}`;
 }
 
-function add(runDir, { anchor, kind = null, body, id = null }) {
+// V3.3: parse a `--claim` spec "id | statement | value | unit | source | kind" into a
+// claim object. A note can carry facts (the numbers its point rests on); they live in
+// the author layer, not in a step's output. status is derived: a sourced benchmark is
+// public, everything else is an estimate until confirmed.
+function parseClaimSpec(spec) {
+  const parts = spec.split('|').map((s) => s.trim());
+  if (parts.length < 3) throw new Error(`--claim needs at least "id | statement | value": got "${spec}"`);
+  const [id, statement, rawValue, unit = null, source = null, kind = null] = parts;
+  // numeric if it cleanly parses as a number, else keep the string (ranges like "1200–1500")
+  const num = Number(rawValue);
+  const value = (rawValue !== '' && !Number.isNaN(num) && String(num) === rawValue) ? num : (rawValue || null);
+  const status = (kind === 'benchmark' && source) ? 'public' : 'estimate';
+  return { id, statement, value, unit: unit || null, source: source || 'author note', status, kind: kind || 'benchmark' };
+}
+
+function add(runDir, { anchor, kind = null, body, id = null, claims = [] }) {
   const notes = load(runDir);
   const note = { id: id || nextId(notes), anchor, kind, body };
+  if (claims && claims.length) note.claims = claims;
   notes.push(note);
   save(runDir, notes);
   return note;
@@ -66,4 +82,4 @@ function remove(runDir, id) {
   return removed;
 }
 
-module.exports = { ANCHOR_SECTIONS, NOTE_KINDS, notesPath, load, save, add, remove, nextId };
+module.exports = { ANCHOR_SECTIONS, NOTE_KINDS, notesPath, load, save, add, remove, nextId, parseClaimSpec };
