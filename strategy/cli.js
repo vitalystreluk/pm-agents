@@ -64,9 +64,14 @@ function stepFile(run, step) {
   return path.join(run, `${step}.json`);
 }
 
+// V4.2: optional depth steps — not in STEP_ORDER (so absent runs are unaffected), but if present
+// they carry claims/citations and must be folded into the ledger like any step.
+const OPTIONAL_LEDGER_STEPS = ['08-feature-specs'];
+
 function ingestLedger(run) {
   const ledger = new Ledger(run);
-  ledger.ingest(STEP_ORDER.map((s) => stepFile(run, s)));
+  const optionals = OPTIONAL_LEDGER_STEPS.filter((s) => fs.existsSync(stepFile(run, s)));
+  ledger.ingest([...STEP_ORDER, ...optionals].map((s) => stepFile(run, s)));
   return ledger;
 }
 
@@ -210,6 +215,15 @@ function cmdRender(args) {
     const corpErrors = validateCorporate(JSON.parse(fs.readFileSync(corpFile, 'utf8')));
     if (corpErrors.length) {
       console.error(`Cannot render — 00-corporate.json has errors:\n  ${corpErrors.join('\n  ')}`);
+      process.exit(1);
+    }
+  }
+  // V4.2: optional feature-specs depth layer — validate if present (absent is fine).
+  const specFile = path.join(run, '08-feature-specs.json');
+  if (fs.existsSync(specFile)) {
+    const specErrors = validate('08-feature-specs', JSON.parse(fs.readFileSync(specFile, 'utf8')));
+    if (specErrors.length) {
+      console.error(`Cannot render — 08-feature-specs.json has errors:\n  ${specErrors.join('\n  ')}`);
       process.exit(1);
     }
   }

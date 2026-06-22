@@ -159,6 +159,26 @@ const validators = {
     return e;
   },
 
+  '08-feature-specs': (d) => {
+    const e = [];
+    // V4.2: depth layer. Turns the KEY roadmap initiatives (from s3) into full specifications —
+    // the difference between a feature catalog and a strategy document (cf. v1.3 §6–8). Optional
+    // step (not in STEP_ORDER): absent runs render exactly as before. Each spec owes the same
+    // dimensions a real PM spec carries; a spec missing risks or effort is a catalog row, not a spec.
+    const specs = req(d, 'specs', 'array', '08', e) || [];
+    specs.forEach((s, i) => {
+      const p = `08.specs[${i}]`;
+      req(s, 'initiative', 'string', p, e); // must match an initiative name from 03-roadmap
+      req(s, 'howItWorks', 'string', p, e); // the mechanism, step by step
+      req(s, 'approach', 'string', p, e);   // technical approach / stack
+      req(s, 'effort', 'string', p, e);     // build complexity / timeframe (honest, not a guess dressed as fact)
+      req(s, 'impact', 'string', p, e);     // which metrics it moves — reference claims as {{claim:id}} tokens
+      req(s, 'risks', 'string', p, e);      // what could go wrong; a spec without risks is marketing
+    });
+    validateClaims(d, '08', e); // a spec may introduce an effort/cost claim — same provenance contract
+    return e;
+  },
+
   '06-review': (d) => {
     const e = [];
     const p0 = req(d, 'p0', 'array', '06', e) || [];
