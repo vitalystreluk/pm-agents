@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const { Ledger } = require('../core/ledger');
-const { validate, validateNotes, STEP_ORDER, STEP_DECISION_WEIGHT } = require('../core/schema');
+const { validate, validateNotes, validateCorporate, STEP_ORDER, STEP_DECISION_WEIGHT } = require('../core/schema');
 const notesLib = require('../core/notes');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -202,6 +202,16 @@ function cmdRender(args) {
   if (noteErrors.length) {
     console.error(`Cannot render — notes.json has errors:\n  ${noteErrors.join('\n  ')}`);
     process.exit(1);
+  }
+  // V4.0: if a corporate-strategy overlay is present, it must be well-formed — the whole
+  // document is shaped to it, so a malformed prism is worse than none.
+  const corpFile = path.join(run, '00-corporate.json');
+  if (fs.existsSync(corpFile)) {
+    const corpErrors = validateCorporate(JSON.parse(fs.readFileSync(corpFile, 'utf8')));
+    if (corpErrors.length) {
+      console.error(`Cannot render — 00-corporate.json has errors:\n  ${corpErrors.join('\n  ')}`);
+      process.exit(1);
+    }
   }
   const ledger = ingestLedger(run);
   const { render } = require('./render-docx');
