@@ -1,8 +1,8 @@
 # pm-agents
 
-**The strategy document you saw was not written in an editor. It was *rendered from state* — where every number knows its source, every verdict knows what data it's waiting on, and the product strategy is subordinate to the company's goal.**
+**A product strategy built as a *render of state* — not an editable file. Every number knows its source, every verdict knows what data it's still waiting on, and the product strategy is subordinate to the company's goal.**
 
-This is the engine behind the BotConversa Product Strategy & Roadmap. This README is for the person who builds with tools, not slides — it shows how the document is made, and what happens the moment we feed it real BotConversa data.
+A system I'm building and refining, pressure-tested on a real case (a Brazilian SMB WhatsApp-automation SaaS). This README is for people who build with tools, not slides — it shows how the document is made, and what happens the moment real internal data goes in.
 
 > The core rule: **an AI conclusion you can't trace back to data is an opinion.** Everything here exists to make the difference visible.
 
@@ -51,7 +51,7 @@ s10 gaps & risks        →  what this doesn't cover, and the risks to the whole
 
 This is the top of the pyramid, and most tools skip it. **A product strategy is meaningless until you know what the company is optimizing for.** Profitability? Market share? New markets? Owning the entire software stack of a vertical?
 
-The same facts about BotConversa produce a *different* North Star, a different roadmap, and a different price under "durable profitability" than under "grab share now." So `/s0-corporate` fixes the company goal first — and if the founders don't have one written down yet (most SMB software doesn't), it doesn't invent one. It lays out the real options and the trade-offs and helps decide, on the record. Everything below then reads through that prism, and if a standard product move conflicts with the company goal, the document **surfaces the tension instead of smoothing it over**.
+The same product facts produce a *different* North Star, a different roadmap, and a different price under "durable profitability" than under "grab share now." So `/s0-corporate` fixes the company goal first — and if the founders don't have one written down yet (most SMB software doesn't), it doesn't invent one. It lays out the real options and the trade-offs and helps decide, on the record. Everything below then reads through that prism, and if a standard product move conflicts with the company goal, the document **surfaces the tension instead of smoothing it over**.
 
 ### Depth, not a feature catalog
 
@@ -63,18 +63,18 @@ The document ends with two sections most strategies avoid: **what it does not co
 
 ---
 
-## What happens when we add BotConversa's real data
+## What happens when real internal data goes in
 
-This is the next step I mentioned. Right now the document runs on public data, industry benchmarks, and what the founding team confirmed verbally. The moment we connect real internal numbers, the document **rewrites itself**:
+Right now the document runs on public data, industry benchmarks, and what a founding team confirms verbally. The moment real internal numbers connect, the document **rewrites itself**:
 
 ```bash
 node strategy/cli.js collect-plan       # the agent's own data request, ranked by impact
 # then in Claude Code: /collect-data  — a guided dialogue, one metric at a time:
-#   what it needs, why it matters, where in your systems it lives
+#   what it needs, why it matters, where in the company's systems it lives
 node strategy/cli.js render             # the document re-renders from the new state
 ```
 
-It asks only for numbers that live in *your* systems (churn, MRR, activation, cost-to-serve) — never for a price we proposed or a competitor fact already public. And when a real number **contradicts** an estimate, it doesn't quietly relabel it — it produces a **delta report** naming every conclusion that was built on the old value, so we re-examine them on purpose. (In one run, confirming a competitor's real entry price inverted the positioning logic — and the document flagged exactly which sections had to be re-reasoned, instead of silently rewording them.)
+It asks only for numbers that live in internal systems (churn, MRR, activation, cost-to-serve) — never for a price the strategy itself proposed, or a competitor fact already public. And when a real number **contradicts** an estimate, it doesn't quietly relabel it — it produces a **delta report** naming every conclusion that was built on the old value, so they get re-examined on purpose. (In one run, confirming a competitor's real entry price inverted the positioning logic — and the document flagged exactly which sections had to be re-reasoned, instead of silently rewording them.)
 
 The order is by impact: a number the monetization verdict depends on gets collected before a decorative figure. Numbers, market reads, capacity, a sharper company goal — each new input is a trigger to rewrite, with the audit trail intact.
 
@@ -84,7 +84,7 @@ The order is by impact: a number the monetization verdict depends on gets collec
 
 The strategy agent is the product; two others feed it.
 
-- **Discovery** turns raw customer feedback (Reclame Aqui, app-store reviews, support logs) into pain clusters — fully on-device, feedback never leaves the machine — where every insight carries a code-computed frequency and severity and every quote traces to a real source row. Today the strategy's Voice-of-Customer section runs on public signals; discovery is how it gets rebuilt on *your* customers' actual words. The LLM here never reports a number.
+- **Discovery** turns raw customer feedback (Reclame Aqui, app-store reviews, support logs) into pain clusters — fully on-device, feedback never leaves the machine — where every insight carries a code-computed frequency and severity and every quote traces to a real source row. Today the strategy's Voice-of-Customer section runs on public signals; discovery is how it gets rebuilt on a company's actual customers' words. The LLM here never reports a number.
 - **Eval** compares feature variants (e.g. two onboarding-concierge prompts) *before* engineering builds anything — simulated dialogues, an LLM judge held behind a calibration gate, and a quality×cost×latency comparison. It once correctly refused to declare a winner when the fancier variant bought nothing measurable.
 
 ---
@@ -99,7 +99,7 @@ node strategy/cli.js demo && node strategy/cli.js render    # zero-LLM smoke tes
 Then a real run starts with the company goal:
 
 ```bash
-node strategy/cli.js init --product "BotConversa" --description "..." --market "..." \
+node strategy/cli.js init --product "Acme" --description "..." --market "..." \
   --competitors "..." --verticals "..." --author "You"
 # in Claude Code: /s0-corporate  → then /s1-research … /s7-synthesis
 ```
@@ -113,7 +113,7 @@ The whole orchestration is a handful of markdown files and ~600 lines of CLI. No
 - Confirmations are one-at-a-time today (no bulk CSV import); delta reports name affected steps, but re-running them is a manual call — by design, so a human decides before conclusions move.
 - Discovery is validated on a synthetic corpus; the real run on 300–500 reviews is the next step, and frequencies describe people who *wrote* a review, not all users.
 - The reasoning steps run through Claude Code (subscription-based); an autonomous API runner is a deliberate non-goal for now.
-- The current BotConversa run is a rehearsal on illustrative numbers — the structure is real; the figures become real when we sit down with your data.
+- The current reference run is a rehearsal on illustrative numbers — the structure is real; the figures become real once internal data is connected.
 
 ---
 
