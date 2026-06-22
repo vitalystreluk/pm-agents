@@ -39,3 +39,7 @@ Monorepo of three PM agents sharing one spine: **AI conclusions without traceabi
 Author is a PM (10+ yrs, AI/ML focus), comfortable with code but values minimum code.
 Explain technical choices in plain language. Surface tradeoffs explicitly. Push back when something is unclear.
 Communicate with the user in Russian.
+9. V4.0: 00-corporate.json is the corporate-strategy prism (an input overlay like intake, NOT a
+   step in STEP_ORDER, carries no claims). /s0-corporate writes it — hybrid: take intake.companyStrategy
+   if present, else dialogue with founders (never invent a strategy they lack). s2-s7 subordinate
+   every decision to its primaryGoal; honor antiGoals; surface conflicts, don't smooth them.
