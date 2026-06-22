@@ -8,14 +8,31 @@ Run step 2 (metric framework) of the strategy pipeline.
    (value: null if truly unknown) — these become the data request.
 5. Run `node strategy/cli.js status`, fix schema errors.
 
-The North Star must be an outcome the CUSTOMER values, not platform activity. If you are
-considering making it also a billing unit, record the conflict-of-interest as a gamingRisk.
+The North Star must be an outcome the CUSTOMER values, not platform activity.
+
+A North Star that doubles as the billing unit is NOT automatically a defect — outcome
+metrics aligned with billing can be a genuine strength (value alignment, a clean
+commercial model, a strong retention mechanism: the vendor earns when the customer earns).
+Do not reflexively steer away from such a metric. If you choose one, you owe two things,
+and ONLY these two — do not let them inflate scope:
+  (a) record the conflict-of-interest honestly as a gamingRisk (the vendor both measures
+      and is paid on the metric, so it could be inflated rather than genuinely earned), and
+  (b) name the MINIMAL anti-gaming safeguard: the outcome must be initiated/confirmed by
+      the customer or their end-user, not asserted unilaterally by the platform. Deeper
+      verification (a payment in the client's system, a booking in their CRM) is DEFERRED
+      to whatever integrations the roadmap already plans — do NOT invent new roadmap
+      initiatives just to verify the North Star. The safeguard is a counting rule, not a
+      feature build.
+A non-billing outcome metric is equally valid; neither is preferred a priori. Choose the
+metric that best captures what THIS customer's buyer is paying for. If intake.json carries
+a `northStarDirective`, treat it as the chosen North Star — honor it and apply (a)/(b)
+above, rather than re-deriving a different metric.
 
 NAMING RULE: the North Star's name and abbreviation must not collide with standard
-financial/business abbreviations (ARR, MRR, CAC, LTV, NRR, ARPU, GMV). If an
-industry-standard term exists for the metric (e.g. "Containment Rate" for
-resolution-without-human in chatbot/contact-center contexts), prefer it — it makes
-the metric externally benchmarkable.
+financial/business abbreviations (ARR, MRR, CAC, LTV, NRR, ARPU, GMV). If a widely
+understood industry term exists for the chosen metric, prefer it — it makes the metric
+externally benchmarkable. (Do not let the naming rule bias WHICH metric you pick; it only
+governs how you name the one you already chose.)
 
 V3 — collectionHint (drives the /collect-data dialogue): for every claim you create,
 add a short `collectionHint` — where the company would normally find this number
