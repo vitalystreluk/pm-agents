@@ -138,6 +138,23 @@ const validators = {
       e.push(err('05.verdict', 'must be green | conditional | no'));
     if (verdict === 'green' && (d.dependsOnClaims || []).length > 0)
       e.push(err('05.verdict', 'cannot be "green" while dependsOnClaims is non-empty — a verdict cannot pass its own decision gate before the data exists'));
+    // V4.1: when the model bills on an EARNED OUTCOME (outcome/hybrid), the billing unit is a
+    // thing the vendor both measures and is paid on — so it owes an integrity policy. This is
+    // the §7.7 discipline: a billed outcome must be externally/end-user verifiable, disputable,
+    // reversible, rate-limited, and governed against the conflict of interest. It is a COUNTING
+    // and GOVERNANCE ruleset, NOT new product scope — deeper verification is deferred to planned
+    // integrations. Required only when billingBasis says outcome is billed; flat/usage skip it.
+    if (d.billingBasis !== undefined && !['flat', 'usage', 'outcome', 'hybrid'].includes(d.billingBasis))
+      e.push(err('05.billingBasis', 'must be flat | usage | outcome | hybrid'));
+    if (['outcome', 'hybrid'].includes(d.billingBasis)) {
+      const ip = req(d, 'integrityPolicy', 'object', '05', e);
+      if (ip) {
+        req(ip, 'verifiableEvent', 'string', '05.integrityPolicy', e); // what externally/end-user-confirmed signal counts a billable outcome (not platform-asserted)
+        req(ip, 'disputePolicy', 'string', '05.integrityPolicy', e);   // client can dispute a charge; window + resolution
+        req(ip, 'antiGaming', 'string', '05.integrityPolicy', e);      // reversal + rate-limit so a misconfigured flow can't inflate the bill
+        req(ip, 'governance', 'string', '05.integrityPolicy', e);      // who may change the billing-unit definition; conflict-of-interest acknowledgment
+      }
+    }
     validateClaims(d, '05', e);
     return e;
   },
