@@ -47,3 +47,7 @@ Communicate with the user in Russian.
     is REQUIRED (verifiableEvent, disputePolicy, antiGaming, governance) — the §7.7 discipline that
     makes outcome-billing trustworthy. It's a counting+governance ruleset, NOT new product scope;
     deeper verification defers to planned integrations. s7 weaves it into the monetization narrative.
+11. V4.2: /s8-feature-specs is an OPTIONAL depth step (not in STEP_ORDER; absent runs unaffected).
+    It deepens KEY s3 initiatives into specs {initiative, howItWorks, approach, effort, impact, risks}.
+    Numbers via claims/tokens; effort estimates are claims. s7 weaves specs into the roadmap narrative.
+    Ingest folds its token citations into usedIn; render validates it if present.
