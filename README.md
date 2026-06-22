@@ -1,146 +1,126 @@
 # pm-agents
 
-Agent systems for product management work, built on one principle:
+**The strategy document you saw was not written in an editor. It was *rendered from state* — where every number knows its source, every verdict knows what data it's waiting on, and the product strategy is subordinate to the company's goal.**
 
-> **AI conclusions without traceability to data are opinions.**
+This is the engine behind the BotConversa Product Strategy & Roadmap. This README is for the person who builds with tools, not slides — it shows how the document is made, and what happens the moment we feed it real BotConversa data.
 
-Two working agents, one shared spine. Every number carries its source and status. Every verdict knows what data gates it. The LLM proposes; deterministic code validates — schemas own scores, verdicts, and state, and the model never grades itself.
-
-| Agent | Status | What it does |
-|---|---|---|
-| [`strategy/`](strategy/) | **shipped** — battle-tested on a real B2B SaaS case | Generates a full product strategy & roadmap (DOCX/PDF) from market inputs; upgrades it with internal data via a Claim Ledger and delta reports |
-| [`evalagent/`](evalagent/) | **shipped** — full run on a pre-implementation feature | Evaluates LLM features: simulated dialogues, LLM-as-a-Judge with a calibration gate, quality×cost×latency frontier across prompt/model variants |
-| [`discovery/`](discovery/) | **shipped** — validated on synthetic corpus | Raw user feedback (CSV) → pain clusters on local embeddings → prioritized report where every insight carries a code-computed frequency, severity, segment, and source-traced quotes. The most deterministic agent: one LLM step of four. |
+> The core rule: **an AI conclusion you can't trace back to data is an opinion.** Everything here exists to make the difference visible.
 
 ---
 
-## Why this is not another LLM wrapper
+## The one idea: a document is a render, not a file
 
-**1. Documents are renders of state — never edited artifacts.**
-Every quantitative claim lives in a Claim Ledger as a typed record: `{id, statement, value, unit, source, status}` with statuses `estimate / public / confirmed / revised`. Narrative text references numbers only as `{{claim:id}}` tokens; the renderer resolves them with live status markers. A number and its status live in one record — so the classic strategy-deck bug ("page 1 says no data, page 11 says confirmed") is impossible *by construction*, not by diligence.
+Every quantitative claim lives in a **Claim Ledger** as a typed record:
 
-**2. The LLM never computes its own scores.**
-Feature-scoring totals are computed by the renderer from the visible rubric. Eval verdicts (`exitState`, `confidence`, `weightedTotal`) are set only by the CLI. A monetization verdict cannot be `green` while it depends on unconfirmed claims — the schema rejects it. These are not conventions; they are validation rules that fail the pipeline.
+```
+{ id, statement, value, unit, source, status }   status ∈ estimate | public | confirmed | revised
+```
 
-**3. Evaluation is built in, and it caught real bugs.**
-The strategy agent's battle run went through a three-stage review loop:
-- **In-pipeline adversarial self-review** (before synthesis): 6 P0 issues — cross-step contradictions, a verdict outrunning its own decision gate, targets with no claim records;
-- **External model review** (after synthesis): 5 more P0s, including an *architectural* bug — the render contract between how the agent filled the ledger and how the renderer resolved tokens — diagnosed from JSON alone;
-- **Instrumented manual audit** of the rendered document: 4 more findings, including a prose-vs-list count mismatch and a scoring "winner" whose margin (3.9 vs 3.75) didn't survive weight sensitivity.
+The prose never contains a raw number — it references claims as `{{claim:id}}` tokens, and the renderer resolves them with their live status. A number and its status live in *one* record.
 
-Each failure class was encoded into schema rules or step prompts — not patched point-wise. Document quality: **38 broken claim markers → 0**; ledger: **42/44 null values → 12 legitimate unknowns**, rendered as a prioritized data request.
+So the classic strategy-deck failure — *page 1 says "no data yet", page 11 quotes it as confirmed* — is **impossible by construction**, not by proofreading. When a number changes, every sentence that used it changes with it, everywhere, in one re-render. If you've ever watched a deck rot as the numbers drift, you know why this matters.
 
-**4. The eval agent refused to declare a winner — correctly.**
-First battle run: 15 cases × 2 prompt variants, 30 simulated PT-BR dialogues (SHA-256-hashed transcripts), LLM-as-a-Judge with documented bias mitigations. Result: `winner: INCONCLUSIVE` at Δ=0.03 — the explicit-instructions variant bought nothing measurable, so the cheaper base prompt wins by default. The judge was calibrated against independent labels (≥80% within-1-point agreement per criterion; v1 used cross-model proxy labels — honestly disclosed, blind human calibration pending). Four rubric rules were born from the disagreement analysis, including an adversarial-case scoring fix and an explicit language policy.
+A few rules the system enforces on itself (it cannot be talked out of them):
+
+- **The model never grades its own work.** Feature-scoring totals are computed by code from a visible rubric. The monetization verdict **cannot be `green` while it still depends on an unconfirmed number** — the validation rejects it. A verdict can't pass its own gate before the data exists.
+- **A close call is named, not hidden.** When two options score within 10% of each other, the document flags it as a toss-up and breaks the tie on logic (sequence, dependency), not on a fake-precise decimal.
+- **It says what it doesn't know.** Unconfirmed numbers render as an explicit, prioritized data request — not as confident-sounding filler.
+
+One battle run took the document from **38 broken claim markers to 0**, and a ledger of **42 null values down to 12 honest unknowns** — each rendered as "here's what to measure, and why."
 
 ---
 
-## Strategy agent — 60 seconds
+## How the strategy is built
+
+The pipeline runs as a sequence of steps. The deterministic parts (validation, ledger, scoring math, rendering) are plain Node — zero LLM. The reasoning steps run as Claude Code slash commands. The model proposes; the code validates.
+
+```
+s0 corporate strategy   →  what is the company actually trying to win?
+s1 research             →  competitors, pricing (web-verified, with dates), market moment
+s2 framework            →  North Star + metric tree (every metric tied to a claim)
+s3 roadmap              →  three horizons; no initiative without a success metric and an owner
+s4 scoring              →  visible rubric, code-computed totals, toss-up rule
+s5 monetization         →  alternatives weighed, sensitivity table, a gated verdict
+s6 review               →  adversarial self-review before anything is written
+s7 synthesis            →  the document, woven from state
+s8 feature specs        →  the key bets, specified in depth (optional)
+s10 gaps & risks        →  what this doesn't cover, and the risks to the whole bet (optional)
+```
+
+### s0 — the strategy is subordinate to *your* goal
+
+This is the top of the pyramid, and most tools skip it. **A product strategy is meaningless until you know what the company is optimizing for.** Profitability? Market share? New markets? Owning the entire software stack of a vertical?
+
+The same facts about BotConversa produce a *different* North Star, a different roadmap, and a different price under "durable profitability" than under "grab share now." So `/s0-corporate` fixes the company goal first — and if the founders don't have one written down yet (most SMB software doesn't), it doesn't invent one. It lays out the real options and the trade-offs and helps decide, on the record. Everything below then reads through that prism, and if a standard product move conflicts with the company goal, the document **surfaces the tension instead of smoothing it over**.
+
+### Depth, not a feature catalog
+
+A roadmap that lists initiatives is a catalog. The key bets get **specified** — how it works, the technical approach, honest build effort, the metrics it moves, and what could go wrong (`s8`). And because outcome-based pricing only works if the billing unit is tamper-resistant, any model that bills on an earned outcome (an SBI) **must** carry an integrity policy: what counts as a verified outcome (confirmed by the customer's end-user, never asserted by the platform), the dispute rule, the rate-limit against gaming, and governance over the conflict of interest. That's not bolted on — the system refuses to ship outcome-billing without it.
+
+### It tells you where it's thin
+
+The document ends with two sections most strategies avoid: **what it does not cover** (capacity, GTM channels, a candid retrospective — each tagged with *why* it's deferred and what would close it) and the **strategy-level risks** — including the sharp one: *as general-purpose models get better, why won't a Lovable-style builder assemble the bot directly and make a dedicated SMB platform redundant?* The document states that risk plainly and answers it, rather than hoping no one asks.
+
+---
+
+## What happens when we add BotConversa's real data
+
+This is the next step I mentioned. Right now the document runs on public data, industry benchmarks, and what the founding team confirmed verbally. The moment we connect real internal numbers, the document **rewrites itself**:
+
+```bash
+node strategy/cli.js collect-plan       # the agent's own data request, ranked by impact
+# then in Claude Code: /collect-data  — a guided dialogue, one metric at a time:
+#   what it needs, why it matters, where in your systems it lives
+node strategy/cli.js render             # the document re-renders from the new state
+```
+
+It asks only for numbers that live in *your* systems (churn, MRR, activation, cost-to-serve) — never for a price we proposed or a competitor fact already public. And when a real number **contradicts** an estimate, it doesn't quietly relabel it — it produces a **delta report** naming every conclusion that was built on the old value, so we re-examine them on purpose. (In one run, confirming a competitor's real entry price inverted the positioning logic — and the document flagged exactly which sections had to be re-reasoned, instead of silently rewording them.)
+
+The order is by impact: a number the monetization verdict depends on gets collected before a decorative figure. Numbers, market reads, capacity, a sharper company goal — each new input is a trigger to rewrite, with the audit trail intact.
+
+---
+
+## The supporting agents
+
+The strategy agent is the product; two others feed it.
+
+- **Discovery** turns raw customer feedback (Reclame Aqui, app-store reviews, support logs) into pain clusters — fully on-device, feedback never leaves the machine — where every insight carries a code-computed frequency and severity and every quote traces to a real source row. Today the strategy's Voice-of-Customer section runs on public signals; discovery is how it gets rebuilt on *your* customers' actual words. The LLM here never reports a number.
+- **Eval** compares feature variants (e.g. two onboarding-concierge prompts) *before* engineering builds anything — simulated dialogues, an LLM judge held behind a calibration gate, and a quality×cost×latency comparison. It once correctly refused to declare a winner when the fancier variant bought nothing measurable.
+
+---
+
+## Run it yourself
 
 ```bash
 npm install
-node strategy/cli.js demo && node strategy/cli.js render   # zero-LLM smoke test
-
-# real run (LLM steps execute in Claude Code via slash commands /s1-research … /s7-synthesis)
-node strategy/cli.js init --product "X" --description "..." --market "..." \
-  --competitors "A,B,C" --verticals "v1,v2" --author "You"
+node strategy/cli.js demo && node strategy/cli.js render    # zero-LLM smoke test — see a document render from state
 ```
 
-The pipeline: research (web-verified competitor pricing with verification dates) → metric framework (North Star with mandatory gaming-risk analysis) → three-horizon roadmap (no initiative without a success metric and an owner) → feature scoring (visible rubric, renderer-computed totals, toss-up rule for <10% gaps) → monetization (alternatives considered, sensitivity table, gated verdict) → adversarial self-review → synthesis.
-
-**Version 2 — internal data:**
+Then a real run starts with the company goal:
 
 ```bash
-node strategy/cli.js claims                 # the agent's own data request: what to collect and why
-node strategy/cli.js confirm churn_m1 --value 4.5 --source "billing export, Jun 2026"
-# → DELTA REPORT: if the confirmed value contradicts the estimate, it names
-#   the steps whose conclusions were built on it — re-check, don't re-label
-node strategy/cli.js render                 # the document re-renders from state
+node strategy/cli.js init --product "BotConversa" --description "..." --market "..." \
+  --competitors "..." --verticals "..." --author "You"
+# in Claude Code: /s0-corporate  → then /s1-research … /s7-synthesis
 ```
 
-**Version 3 — guided data collection:**
-
-```bash
-node strategy/cli.js collect-plan           # impact-ranked queue of what to collect, + progress
-# then in Claude Code: /collect-data — a dialogue that walks the queue one metric at
-# a time, says why each matters and where to find it, and calls confirm under the hood
-```
-
-`/collect-data` turns the agent from a document generator into a partner for pulling
-a company's *internal* numbers. The split is strict: the LLM runs the conversation and
-suggests where each metric lives; the CLI owns the ordering, the progress count, the
-write, and the contradiction delta (hard rule 8). Order is by **impact** — a number the
-monetization verdict depends on is collected before a descriptive figure — derived from
-each claim's `usedIn` steps, their decision weight, and `dependsOnClaims`. Honest
-boundaries: a matching value re-renders instantly; a contradicting one names the affected
-steps and asks before any re-run (it never re-runs conclusions blindly, and never
-overwrites a hand-edited step silently). V3 automates collection and recompute, not
-product judgement — the final document still wants a human's polish.
-
-**Version 3.1 — claim kind (collect only what a client actually has):**
-
-Each claim carries a `kind`: `metric` (an internal company number — churn, MRR, activation, cost base), `recommendation` (a price or target *we* propose), or `benchmark` (a public, market, or derived fact such as a competitor's listed price). `collect-plan` and `/collect-data` surface **only `kind: metric`** claims — so the agent asks a client for the numbers that live in their systems and never for a recommendation we made or a fact already on a competitor's website. Absent `kind` is treated as `benchmark` (the safe default: an untagged claim is never asked of a client). For an existing run, `node scripts/tag-claims-kind.js output/<run>` tags claims in bulk, then `render`.
-
-**Version 3.2 — author notes (the author's voice, woven into the body):**
-
-```bash
-node strategy/cli.js note add --anchor monetization --kind caveat --body "..."   # capture a note
-# then /author-note in Claude Code for conversational drafting + routing,
-# and /s7-synthesis to weave notes into the document body
-```
-
-Author commentary — context, rationale, risk flags, caveats — used to sit in a block at
-the top of the document because the pipeline had no place for it in the body. Now it lives
-in `notes.json` (an overlay parallel to `confirmations.json`, so a re-run never wipes it),
-each note `anchor`ed to a section or a claim. `/s7-synthesis` weaves each note into the
-prose of its anchored section (rephrasing for flow; the author polishes the result), and
-records `wovenNotes` so `render` flags any note added later that hasn't been woven yet.
-A note never changes a conclusion: critique that does goes through `/s6-review` into state.
-That routing is the author's call — `/author-note` surfaces the fork but never decides it.
-
-A note may also carry **facts** it rests on (e.g. a competitor's live price): `note add … --claim "m07 | Current live Beginner tier | 189 | BRL/month | <source> | benchmark"` (repeatable). Note-borne facts become real ledger claims at ingest with provenance `note:<id>` — tokenized, shown in the appendix as author-introduced, never written into a step's output. This removes the manual "should I edit step 5?" detour: an author-introduced fact lives in the author layer, not in a step.
-
-**Version 4.0 — corporate strategy as the prism:** Product strategy is subordinate to the company's goal. `00-corporate.json` (an input overlay like intake, not a step) records the `primaryGoal` (profitability / market-share / new-markets / vertical-software-contour / exit) with priorities and anti-goals. `/s0-corporate` writes it — hybrid: it takes `companyStrategy` from intake if present, otherwise runs a founder dialogue (and, if the company has no stated strategy, helps decide one transparently rather than inventing it). Every downstream step (s2–s7) subordinates its decisions to that goal: the same product facts yield a different North Star, roadmap, and monetization under "max profit" vs "own the vertical's whole software stack."
-
-## Eval agent — 60 seconds
-
-```bash
-npm run eval-demo                           # mock run from fixtures, zero LLM calls
-node evalagent/cli.js status                # e1-intake → e2-calibrate → e3-run → e4-judge
-node evalagent/cli.js verify                # re-hash all transcripts, report tampering
-node evalagent/cli.js render-report        # frontier table, error taxonomy, scores by segment
-```
-
-Designed for **pre-implementation evaluation**: the target feature (an AI onboarding concierge) doesn't exist yet — a two-pass simulator generates the dialogues (LLM-plays-bot vs LLM-plays-user per case script), so prompt candidates are compared *before* engineering investment. The judge is blocked by a calibration gate until agreement with independent labels passes threshold; calibration at N=5 is explicitly labeled a smoke test, with statistical confidence requiring N≥10.
-
-## Discovery agent — 60 seconds
-
-```bash
-pip install -r discovery/requirements.txt
-python discovery/cli.py demo
-python discovery/cli.py status
-python discovery/cli.py voc-validate --strategy-run <run>
-python discovery/cli.py export-eval-cases --min-severity 3
-```
-
-Raw feedback → clusters → prioritized insights, built so that the LLM never reports a number. Pipeline: d1 ingest (CSV normalize, dedup) → d2 embed+cluster (local multilingual sentence-transformers + HDBSCAN, fully offline — feedback never leaves the machine) → d3 label (the one LLM step: names each cluster, picks quotes by row-id; output rejected if it contains any count, every quote must trace to a real source row) → d4 report (frequencies and severities computed by the CLI). Cross-agent loops close the portfolio: voc-validate checks the strategy agent's VoC claims against real clusters with a deterministic verdict (supported / insufficient-evidence; contradicts is always a manual PM call), and export-eval-cases turns complaint clusters into candidate eval cases.
-
-## Case study
-
-[`docs/case-study/`](docs/case-study/) contains the full battle-run artifacts: the rendered strategy PDF, the three review documents with every finding, and the eval run report with the frontier table. The git history is the changelog of the eval loop: finding → schema rule → re-render → zero recurrence.
-
-## Honest limitations
-
-- V2 confirmations are one-at-a-time (no CSV batch import); delta reports name affected steps but re-runs are manual; confirmed values don't expire (no staleness marking yet).
-- Eval calibration v1 used cross-model proxy labels, not blind human labels — disclosed in `calibration.json`; the rubric now mandates blind collection (anchoring-bias rule #6).
-- Simulator latency numbers are pipeline fields, not production measurements — cost figures are real arithmetic, latency awaits a live integration.
-- LLM steps run through Claude Code slash commands (subscription-based); an API runner is a deliberate non-goal until autonomous scheduled runs are needed.
-- Discovery is validated on a 42-row synthetic corpus; a real-data run (300–500 reviews) is the next step. Frequencies answer "how common among people who wrote a review," not "among all users" (selection bias).
-
-## Stack
-
-Node.js CLI (validation, ledger, rendering — zero LLM) · Claude Code as the LLM step runner (`.claude/commands/`) · `docx` + LibreOffice for documents · SHA-256 transcript integrity · no frameworks — the orchestration is seven markdown files and ~600 lines of CLI, and that is a feature.
+The whole orchestration is a handful of markdown files and ~600 lines of CLI. No framework. That's deliberate — you can read all of it.
 
 ---
 
-*Vitaly Streluk · [LinkedIn](https://www.linkedin.com/in/vitaly-streluk) · see also [rag-agent-langgraph](https://github.com/vitalystreluk/rag-agent-langgraph) — agentic RAG with parallel retrieval, hallucination checks, and HITL*
+## Honest limitations
+
+- Confirmations are one-at-a-time today (no bulk CSV import); delta reports name affected steps, but re-running them is a manual call — by design, so a human decides before conclusions move.
+- Discovery is validated on a synthetic corpus; the real run on 300–500 reviews is the next step, and frequencies describe people who *wrote* a review, not all users.
+- The reasoning steps run through Claude Code (subscription-based); an autonomous API runner is a deliberate non-goal for now.
+- The current BotConversa run is a rehearsal on illustrative numbers — the structure is real; the figures become real when we sit down with your data.
+
+---
+
+## Stack
+
+Node.js CLI (validation, ledger, scoring math, rendering — all zero-LLM) · Claude Code as the reasoning-step runner (`.claude/commands/`) · `docx` + LibreOffice for output · no frameworks, on purpose.
+
+---
+
+*Vitaly Streluk · [LinkedIn](https://www.linkedin.com/in/vitaly-streluk)*
