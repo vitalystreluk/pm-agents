@@ -43,3 +43,7 @@ Communicate with the user in Russian.
    step in STEP_ORDER, carries no claims). /s0-corporate writes it — hybrid: take intake.companyStrategy
    if present, else dialogue with founders (never invent a strategy they lack). s2-s7 subordinate
    every decision to its primaryGoal; honor antiGoals; surface conflicts, don't smooth them.
+10. V4.1: s5 declares billingBasis (flat|usage|outcome|hybrid). When outcome/hybrid, integrityPolicy
+    is REQUIRED (verifiableEvent, disputePolicy, antiGaming, governance) — the §7.7 discipline that
+    makes outcome-billing trustworthy. It's a counting+governance ruleset, NOT new product scope;
+    deeper verification defers to planned integrations. s7 weaves it into the monetization narrative.
