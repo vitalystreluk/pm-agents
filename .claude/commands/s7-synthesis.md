@@ -60,3 +60,8 @@ billing), weave it into the monetization narrative as the systemic answer to the
 conflict-of-interest — not a footnote. It is what makes "the vendor earns when the customer
 earns" safe: the billed outcome is verifiable, disputable, reversible, rate-limited, and the
 definition is governed. Present it as integral to why the outcome-billing model is trustworthy.
+
+FEATURE SPECS (V4.2): if 08-feature-specs.json exists, weave each spec into the roadmap narrative
+as a proper feature section (how it works, approach, effort, impact, risks) — like v1.3 §6–8, not
+a one-line catalog entry. The specs are where the document earns depth; give the key initiatives
+room. Keep numbers as {{claim:id}} tokens. If no specs file exists, render the roadmap as before.
