@@ -35,3 +35,12 @@ Decision rule: "is this a number that lives in THIS company's systems?" → metr
 propose it?" → recommendation. "Is it public or derived?" → benchmark. A current competitor
 price from their website is benchmark, not metric — do not ask a client for it. If unsure, omit
 kind; downstream treats absent kind as benchmark (the safe default — never asked of a client).
+
+CORPORATE PRISM (V4.0): if output/<run>/00-corporate.json exists, read it FIRST and subordinate
+this step's decisions to its primaryGoal. The same product facts point to different choices under
+different company goals (e.g. profitability → outcome/retention-led North Star, lean roadmap,
+margin-protective pricing; market-share → adoption-led metric, land-grab roadmap, penetration
+pricing; vertical-software-contour → integration/penetration metric, roadmap that closes the
+vertical's whole software stack, platform pricing). Honor antiGoals as hard constraints. If this
+step's standard move conflicts with the corporate goal, surface the tension explicitly rather than
+smoothing it over. If 00-corporate.json is absent, proceed as before.

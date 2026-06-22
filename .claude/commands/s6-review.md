@@ -17,3 +17,12 @@ absent from the state is a silent failure (it happened: r02→f10 was prescribed
 never applied). Also check prose-vs-list consistency everywhere: if text says "four
 unknowns" the adjacent list must have exactly four items; if text counts "nine
 metrics" recount them from the current state, not from memory of an earlier draft.
+
+CORPORATE PRISM (V4.0): if output/<run>/00-corporate.json exists, read it FIRST and subordinate
+this step's decisions to its primaryGoal. The same product facts point to different choices under
+different company goals (e.g. profitability → outcome/retention-led North Star, lean roadmap,
+margin-protective pricing; market-share → adoption-led metric, land-grab roadmap, penetration
+pricing; vertical-software-contour → integration/penetration metric, roadmap that closes the
+vertical's whole software stack, platform pricing). Honor antiGoals as hard constraints. If this
+step's standard move conflicts with the corporate goal, surface the tension explicitly rather than
+smoothing it over. If 00-corporate.json is absent, proceed as before.

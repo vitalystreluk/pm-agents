@@ -45,3 +45,12 @@ claims (provenance "note:<id>") with tokens. So when weaving such a note, refere
 numbers as {{claim:id}} like any other — they resolve from the ledger. Do NOT add them to
 any step's JSON, and do NOT write the raw number in prose. The author layer holds the fact;
 steps stay untouched.
+
+CORPORATE PRISM (V4.0): if output/<run>/00-corporate.json exists, read it FIRST and subordinate
+this step's decisions to its primaryGoal. The same product facts point to different choices under
+different company goals (e.g. profitability → outcome/retention-led North Star, lean roadmap,
+margin-protective pricing; market-share → adoption-led metric, land-grab roadmap, penetration
+pricing; vertical-software-contour → integration/penetration metric, roadmap that closes the
+vertical's whole software stack, platform pricing). Honor antiGoals as hard constraints. If this
+step's standard move conflicts with the corporate goal, surface the tension explicitly rather than
+smoothing it over. If 00-corporate.json is absent, proceed as before.
