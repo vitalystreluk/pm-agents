@@ -65,3 +65,10 @@ FEATURE SPECS (V4.2): if 08-feature-specs.json exists, weave each spec into the 
 as a proper feature section (how it works, approach, effort, impact, risks) — like v1.3 §6–8, not
 a one-line catalog entry. The specs are where the document earns depth; give the key initiatives
 room. Keep numbers as {{claim:id}} tokens. If no specs file exists, render the roadmap as before.
+
+GAPS & STRATEGIC RISKS (V4.3): if 10-gaps-risks.json exists, render it as TWO closing parts of the
+document: (1) a "What This Document Does Not Cover" section listing notCovered with each gap's status
+and what would close it (cf. v1.3 §12) — honest, not buried; (2) a strategy-level risk section naming
+strategicRisks with their responses (cf. the existential/market author notes). These are the document's
+intellectual-honesty edges — present them as strengths, not apologies. Numbers as {{claim:id}} tokens.
+If absent, omit both sections.
