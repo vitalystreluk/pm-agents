@@ -66,7 +66,7 @@ function stepFile(run, step) {
 
 // V4.2: optional depth steps — not in STEP_ORDER (so absent runs are unaffected), but if present
 // they carry claims/citations and must be folded into the ledger like any step.
-const OPTIONAL_LEDGER_STEPS = ['08-feature-specs'];
+const OPTIONAL_LEDGER_STEPS = ['08-feature-specs', '10-gaps-risks'];
 
 function ingestLedger(run) {
   const ledger = new Ledger(run);
@@ -224,6 +224,15 @@ function cmdRender(args) {
     const specErrors = validate('08-feature-specs', JSON.parse(fs.readFileSync(specFile, 'utf8')));
     if (specErrors.length) {
       console.error(`Cannot render — 08-feature-specs.json has errors:\n  ${specErrors.join('\n  ')}`);
+      process.exit(1);
+    }
+  }
+  // V4.3: optional gaps & strategic-risks layer — validate if present.
+  const gapsFile = path.join(run, '10-gaps-risks.json');
+  if (fs.existsSync(gapsFile)) {
+    const gapsErrors = validate('10-gaps-risks', JSON.parse(fs.readFileSync(gapsFile, 'utf8')));
+    if (gapsErrors.length) {
+      console.error(`Cannot render — 10-gaps-risks.json has errors:\n  ${gapsErrors.join('\n  ')}`);
       process.exit(1);
     }
   }

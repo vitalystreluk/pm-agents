@@ -179,6 +179,36 @@ const validators = {
     return e;
   },
 
+  '10-gaps-risks': (d) => {
+    const e = [];
+    // V4.3: the edges of the document. Two honesty layers v1.3 has and the pipeline lacked:
+    // (1) notCovered — what this document does NOT answer and why (cf. v1.3 §12 "What This
+    //     Document Does Not Cover"): the Fibery-style gaps section that prevents a strategy from
+    //     pretending to completeness. (2) strategicRisks — risks at the level of the whole
+    //     strategy, not per-feature (cf. v1.3 author notes: the US market as a forward indicator
+    //     that de-risks the bets; the existential "why won't a general builder make us redundant").
+    // Optional step (not in STEP_ORDER): absent runs render as before.
+    const nc = req(d, 'notCovered', 'array', '10', e) || [];
+    nc.forEach((g, i) => {
+      const p = `10.notCovered[${i}]`;
+      req(g, 'topic', 'string', p, e);
+      const st = req(g, 'status', 'string', p, e);
+      if (st !== undefined && !['internal-data', 'founder-input', 'separate-workstream'].includes(st))
+        e.push(err(`${p}.status`, 'must be internal-data | founder-input | separate-workstream — name WHY it is deferred'));
+      req(g, 'whyDeferred', 'string', p, e);
+      req(g, 'toComplete', 'string', p, e); // what would close it — keeps a gap honest, not just hand-waved
+    });
+    const sr = req(d, 'strategicRisks', 'array', '10', e) || [];
+    sr.forEach((r, i) => {
+      const p = `10.strategicRisks[${i}]`;
+      req(r, 'risk', 'string', p, e);
+      req(r, 'why', 'string', p, e);       // why it matters at strategy level
+      req(r, 'response', 'string', p, e);  // the answer, or an honest "open — no answer yet"
+    });
+    validateClaims(d, '10', e);
+    return e;
+  },
+
   '06-review': (d) => {
     const e = [];
     const p0 = req(d, 'p0', 'array', '06', e) || [];
