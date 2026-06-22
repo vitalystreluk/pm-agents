@@ -51,3 +51,7 @@ Communicate with the user in Russian.
     It deepens KEY s3 initiatives into specs {initiative, howItWorks, approach, effort, impact, risks}.
     Numbers via claims/tokens; effort estimates are claims. s7 weaves specs into the roadmap narrative.
     Ingest folds its token citations into usedIn; render validates it if present.
+12. V4.3: /s10-gaps-risks is an OPTIONAL layer (not in STEP_ORDER). notCovered[] = Fibery-style gaps
+    (topic, status ∈ internal-data|founder-input|separate-workstream, whyDeferred, toComplete);
+    strategicRisks[] = whole-strategy risks (risk, why, response) incl. mature-market lens + existential
+    general-builder question. s7 renders both as the document's honesty edges. Read through s0 prism.
