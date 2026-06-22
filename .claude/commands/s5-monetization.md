@@ -41,3 +41,20 @@ pricing; vertical-software-contour → integration/penetration metric, roadmap t
 vertical's whole software stack, platform pricing). Honor antiGoals as hard constraints. If this
 step's standard move conflicts with the corporate goal, surface the tension explicitly rather than
 smoothing it over. If 00-corporate.json is absent, proceed as before.
+
+BILLING BASIS & INTEGRITY POLICY (V4.1): declare `billingBasis` for the recommended model —
+flat | usage | outcome | hybrid. If the model bills on an EARNED OUTCOME (outcome or hybrid —
+e.g. per-SBI, per-booking, per-resolution), you MUST include an `integrityPolicy` object,
+because the billing unit is something the vendor both measures and is paid on. This is the §7.7
+discipline (it is a COUNTING and GOVERNANCE ruleset — NOT new product features or integrations;
+deeper verification is deferred to whatever integrations the roadmap already plans). Required fields:
+  - verifiableEvent: what externally- or end-user-confirmed signal counts a billable outcome
+    (client/end-user-initiated, never platform-asserted).
+  - disputePolicy: the client can dispute a charge — state the window and how it resolves
+    (if the event can't be confirmed, it's reversed).
+  - antiGaming: reversal rule (e.g. outcome cancelled within a short window is reversed) AND a
+    rate limit so a misconfigured flow can't inflate the bill.
+  - governance: who may change the billing-unit definition, on what notice, and an explicit
+    acknowledgment of the conflict of interest (vendor earns more as the metric rises).
+If billingBasis is flat or usage-of-non-outcome, integrityPolicy is not required. Do not invent
+verification initiatives — keep this to counting rules and governance.

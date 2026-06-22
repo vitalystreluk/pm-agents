@@ -54,3 +54,9 @@ pricing; vertical-software-contour → integration/penetration metric, roadmap t
 vertical's whole software stack, platform pricing). Honor antiGoals as hard constraints. If this
 step's standard move conflicts with the corporate goal, surface the tension explicitly rather than
 smoothing it over. If 00-corporate.json is absent, proceed as before.
+
+INTEGRITY POLICY (V4.1): if 05-monetization.json carries an integrityPolicy (outcome/hybrid
+billing), weave it into the monetization narrative as the systemic answer to the billing
+conflict-of-interest — not a footnote. It is what makes "the vendor earns when the customer
+earns" safe: the billed outcome is verifiable, disputable, reversible, rate-limited, and the
+definition is governed. Present it as integral to why the outcome-billing model is trustworthy.
