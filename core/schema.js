@@ -204,6 +204,28 @@ function validateNotes(notes) {
   return e;
 }
 
+// V4.0: corporate strategy overlay (00-corporate.json). The product strategy is
+// subordinate to the company's goal; this is the prism every downstream step reads.
+// It is an INPUT overlay (like intake.json), not a step in STEP_ORDER — it carries no
+// claims and is not rendered as a section; it shapes s2–s7 by being read by them.
+const CORPORATE_GOALS = ['profitability', 'market-share', 'new-markets', 'vertical-software-contour', 'exit', 'survival', 'other'];
+function validateCorporate(data) {
+  const e = [];
+  if (!data || typeof data !== 'object') return ['00-corporate.json: must be an object'];
+  const g = req(data, 'primaryGoal', 'string', '00', e);
+  if (g !== undefined && typeof g === 'string' && !CORPORATE_GOALS.includes(g))
+    e.push(err('00.primaryGoal', `unusual goal "${g}" — expected one of ${CORPORATE_GOALS.join('|')} (use "other" + rationale if genuinely different)`));
+  req(data, 'rationale', 'string', '00', e); // why this goal — esp. if derived or "no stated strategy, agreed with founders"
+  // optional shape, validated only if present
+  if (data.priorities !== undefined && !Array.isArray(data.priorities)) e.push(err('00.priorities', 'must be an array (ordered)'));
+  if (data.antiGoals !== undefined && !Array.isArray(data.antiGoals)) e.push(err('00.antiGoals', 'must be an array'));
+  if (data.source !== undefined && !['intake', 'founder-dialogue', 'derived'].includes(data.source))
+    e.push(err('00.source', 'must be intake|founder-dialogue|derived'));
+  return e;
+}
+
+
+
 function validate(stepName, data) {
   const v = validators[stepName];
   if (!v) return [`no validator for step ${stepName}`];
@@ -379,4 +401,4 @@ function validateEval(stepKey, data) {
 
 const EVAL_STEP_ORDER = ['e1', 'e2', 'e3', 'e4'];
 
-module.exports = { validate, validateNotes, STEP_ORDER, STEP_DECISION_WEIGHT, validateEval, EVAL_STEP_ORDER };
+module.exports = { validate, validateNotes, validateCorporate, STEP_ORDER, STEP_DECISION_WEIGHT, validateEval, EVAL_STEP_ORDER };
