@@ -55,11 +55,21 @@ class Ledger {
       }
     };
 
+    // V3.4: a claim's usedIn should reflect every step that CITES it, not only the step
+    // that DECLARES it. Steps reference claims as {{claim:id}} tokens in their prose, so
+    // scan each step's serialized content for tokens and record (step, id) uses; applied
+    // after all claims exist. This makes delta reports name every affected step (e.g. a
+    // confirmed c10 declared in s1 but cited in s5/s7 now lists all three), instead of
+    // only the declaring step.
+    const tokenUse = [];
+    const TOKEN = /\{\{claim:([\w-]+)\}\}/g;
+
     for (const file of stepFiles) {
       if (!fs.existsSync(file)) continue;
       const data = JSON.parse(fs.readFileSync(file, 'utf8'));
       const stepName = path.basename(file, '.json');
       for (const c of data.claims || []) absorb(c, stepName);
+      for (const m of JSON.stringify(data).matchAll(TOKEN)) tokenUse.push([stepName, m[1]]);
     }
 
     // V3.3: author notes may carry facts. They become real ledger claims, provenance
@@ -75,6 +85,13 @@ class Ledger {
           }
         }
       } catch { /* malformed notes.json is caught by the render gate, not here */ }
+    }
+
+    // V3.4: fold token citations into usedIn (claim must already exist; tokens that
+    // reference an unknown id are ignored — render surfaces those separately).
+    for (const [step, id] of tokenUse) {
+      const c = seen.get(id);
+      if (c && !c.usedIn.includes(step)) c.usedIn.push(step);
     }
 
     fs.writeFileSync(path.join(this.runDir, 'claims.json'), JSON.stringify(this.claims, null, 2));
