@@ -33,9 +33,23 @@ function parseArgs(argv) {
   return args;
 }
 
+// All three agents share output/. A run is a STRATEGY run unless it carries another
+// agent's marker: evalagent names dirs "<slug>-eval-<date>", discovery "<slug>-discovery-<date>".
+// Without this filter latestRun() would hand an eval/discovery run to render — the strategy
+// steps are absent there, so it fails with "missing steps" (or worse, picks the wrong run).
+function isForeignRun(name) {
+  return name.includes('-eval-') || name.includes('-discovery-');
+}
+
+function strategyRunDirs() {
+  if (!fs.existsSync(OUT)) return [];
+  return fs.readdirSync(OUT).filter(
+    (d) => !isForeignRun(d) && fs.statSync(path.join(OUT, d)).isDirectory()
+  );
+}
+
 function latestRun() {
-  if (!fs.existsSync(OUT)) return null;
-  const dirs = fs.readdirSync(OUT).filter((d) => fs.statSync(path.join(OUT, d)).isDirectory());
+  const dirs = strategyRunDirs();
   if (!dirs.length) return null;
   // sort by mtime, not name — "demo-<epoch>" must not outrank "botconversa-<date>" alphabetically
   dirs.sort((a, b) => fs.statSync(path.join(OUT, a)).mtimeMs - fs.statSync(path.join(OUT, b)).mtimeMs);
@@ -50,7 +64,7 @@ function resolveRun(args) {
     : ((args._[1] && /^[a-z0-9][\w-]*$/i.test(args._[1])) ? args._[1] : null);
   const dir = named ? path.join(OUT, named) : latestRun();
   if (named && !fs.existsSync(dir)) {
-    console.error(`Run "${named}" not found in output/. Available: ${fs.existsSync(OUT) ? fs.readdirSync(OUT).filter(d => fs.statSync(path.join(OUT, d)).isDirectory()).join(', ') || '(none)' : '(none)'}`);
+    console.error(`Run "${named}" not found in output/. Available: ${strategyRunDirs().join(', ') || '(none)'}`);
     process.exit(1);
   }
   if (!dir || !fs.existsSync(dir)) {
